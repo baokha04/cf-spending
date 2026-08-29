@@ -1,0 +1,3 @@
+# Copy sang .dev.vars khi dev cục bộ.
+# Vectorize và Workers AI không chạy trên miniflare, tắt để phát triển offline.
+AI_FEATURES=off
