@@ -17,14 +17,15 @@ export const csrfGuard: MiddlewareHandler<AppBindings> = async (c, next) => {
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.req.method)) {
     const origin = c.req.header('origin');
     if (origin) {
-      const host = c.req.header('host');
       let originHost: string;
       try {
         originHost = new URL(origin).host;
       } catch {
         return c.json({ error: 'Origin không hợp lệ' }, 403);
       }
-      if (!host || originHost !== host) {
+      // Host của chính URL request là mốc so sánh đáng tin hơn header Host,
+      // vì runtime đã phân giải nó rồi.
+      if (originHost !== new URL(c.req.url).host) {
         return c.json({ error: 'Origin không khớp' }, 403);
       }
     }
