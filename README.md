@@ -16,7 +16,7 @@ khoản có thể vào chung một hộ gia đình qua mã mời để thấy ch
 | Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước |
 | Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
-| Danh mục | Thêm, **sửa tên và biểu tượng**, lưu trữ hoặc xoá danh mục |
+| Danh mục | Thêm, **sửa tên và biểu tượng**, lưu trữ hoặc xoá. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
 | Hộ gia đình | Thành viên và mã mời |
 
@@ -205,12 +205,22 @@ src/shared/types.ts         Kiểu dùng chung hai phía
 
 ## Vài quyết định đáng lưu ý
 
-**Xoá giao dịch chỉ là xoá mềm.** Không có đường nào xoá hẳn một giao dịch: `DELETE`
-đặt `deleted_at` rồi thôi. Bản ghi biến khỏi mọi số liệu (dashboard, khoản lớn, tìm
-kiếm — vector cũng bị gỡ khỏi Vectorize) nhưng vẫn nằm trong danh sách ở dạng gạch
-ngang, kèm nút **Khôi phục** đưa nó trở lại và đẩy vector lại. Ghi nhầm rồi xoá nhầm
-là chuyện thường ở sổ chi tiêu chung của cả nhà, nên nút xoá không được phép là thao
-tác một chiều. Bỏ tick "Hiện giao dịch đã xoá" nếu muốn danh sách gọn lại.
+**Xoá luôn là xoá mềm — cả giao dịch lẫn danh mục.** Không có đường nào xoá hẳn một
+bản ghi: `DELETE` đặt `deleted_at` rồi thôi, và cả hai đều có `POST .../restore` để
+lấy lại. Ghi nhầm rồi xoá nhầm là chuyện thường ở sổ chi tiêu chung của cả nhà, nên
+nút xoá không được phép là thao tác một chiều.
+
+- *Giao dịch* biến khỏi mọi số liệu (dashboard, khoản lớn, tìm kiếm — vector cũng bị
+  gỡ khỏi Vectorize) nhưng vẫn nằm trong danh sách ở dạng gạch ngang; khôi phục sẽ
+  đẩy vector lại. Bỏ tick "Hiện giao dịch đã xoá" nếu muốn danh sách gọn lại.
+- *Danh mục* biến khỏi mọi ô chọn và không sửa được nữa, nhưng hàng vẫn ở lại bảng
+  nên **giao dịch cũ giữ nguyên nhãn** và dashboard vẫn gọi đúng tên nó. Trang Danh
+  mục hiện đủ ba trạng thái: đang dùng, đã lưu trữ (thôi dùng nhưng vẫn là nhãn hợp
+  lệ) và đã xoá.
+- Ràng buộc UNIQUE `(hộ, loại, tên)` tính cả hàng đã xoá, nên tạo lại đúng tên vừa
+  xoá sẽ **khôi phục chính danh mục cũ** (kèm biểu tượng mới) thay vì báo lỗi trùng
+  tên về một hàng người dùng không nhìn thấy. Trùng tên với danh mục đang dùng thì
+  vẫn trả 409 như cũ.
 
 **Sao chép giao dịch.** Nút *Sao chép* điền sẵn form bằng đúng nội dung, số tiền,
 danh mục và cả phần chi tiết của một giao dịch cũ, chỉ đổi ngày thành hôm nay, rồi

@@ -92,16 +92,21 @@ export const api = {
   joinHousehold: (inviteCode: string) => post<MeResponse>('/household/join', { inviteCode }),
   rotateInviteCode: () => post<{ inviteCode: string }>('/household/invite-code/rotate'),
 
-  categories: (includeArchived = false) =>
-    request<{ categories: Category[] }>(`/categories${includeArchived ? '?includeArchived=1' : ''}`),
+  categories: (options: { includeArchived?: boolean; includeDeleted?: boolean } = {}) =>
+    request<{ categories: Category[] }>(
+      `/categories${query({
+        includeArchived: options.includeArchived ? '1' : undefined,
+        includeDeleted: options.includeDeleted ? '1' : undefined,
+      })}`,
+    ),
+  /** `restored` báo rằng tên này thuộc một danh mục đã xoá và nó vừa được dựng lại. */
   createCategory: (body: { name: string; kind: 'income' | 'expense'; icon?: string | null }) =>
-    post<Category>('/categories', body),
+    post<Category & { restored?: boolean }>('/categories', body),
   updateCategory: (id: string, body: { name?: string; icon?: string | null; isArchived?: boolean }) =>
     request<Category>(`/categories/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteCategory: (id: string) =>
-    request<{ deleted?: boolean; archived?: boolean; transactions?: number }>(`/categories/${id}`, {
-      method: 'DELETE',
-    }),
+    request<{ deleted: boolean; transactions: number }>(`/categories/${id}`, { method: 'DELETE' }),
+  restoreCategory: (id: string) => post<Category>(`/categories/${id}/restore`),
 
   transactions: (q: TransactionQuery = {}) =>
     request<TransactionPage>(`/transactions${query({ ...q })}`),

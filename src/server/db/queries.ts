@@ -186,7 +186,10 @@ interface CategoryRow {
   kind: Direction;
   icon: string | null;
   is_archived: number;
+  deleted_at: number | null;
 }
+
+const CATEGORY_COLUMNS = 'id, name, kind, icon, is_archived, deleted_at';
 
 function mapCategory(row: CategoryRow): Category {
   return {
@@ -195,18 +198,24 @@ function mapCategory(row: CategoryRow): Category {
     kind: row.kind,
     icon: row.icon,
     isArchived: row.is_archived === 1,
+    deletedAt: row.deleted_at,
   };
 }
 
 export async function listCategories(
   db: D1Database,
   householdId: string,
-  includeArchived = false,
+  options: { includeArchived?: boolean; includeDeleted?: boolean } = {},
 ): Promise<Category[]> {
-  const sql = includeArchived
-    ? 'SELECT id, name, kind, icon, is_archived FROM categories WHERE household_id = ? ORDER BY kind DESC, name'
-    : 'SELECT id, name, kind, icon, is_archived FROM categories WHERE household_id = ? AND is_archived = 0 ORDER BY kind DESC, name';
-  const { results } = await db.prepare(sql).bind(householdId).all<CategoryRow>();
+  const where = ['household_id = ?'];
+  if (!options.includeArchived) where.push('is_archived = 0');
+  if (!options.includeDeleted) where.push('deleted_at IS NULL');
+  const { results } = await db
+    .prepare(
+      `SELECT ${CATEGORY_COLUMNS} FROM categories WHERE ${where.join(' AND ')} ORDER BY kind DESC, name`,
+    )
+    .bind(householdId)
+    .all<CategoryRow>();
   return results.map(mapCategory);
 }
 
@@ -214,10 +223,35 @@ export async function getCategory(
   db: D1Database,
   householdId: string,
   id: string,
+  includeDeleted = false,
 ): Promise<Category | null> {
   const row = await db
-    .prepare('SELECT id, name, kind, icon, is_archived FROM categories WHERE household_id = ? AND id = ?')
+    .prepare(
+      `SELECT ${CATEGORY_COLUMNS} FROM categories WHERE household_id = ? AND id = ?${
+        includeDeleted ? '' : ' AND deleted_at IS NULL'
+      }`,
+    )
     .bind(householdId, id)
+    .first<CategoryRow>();
+  return row ? mapCategory(row) : null;
+}
+
+/**
+ * Tra theo cặp (loại, tên) — đúng khoá UNIQUE của bảng. Dùng khi tạo mới đụng
+ * ràng buộc: nếu hàng chắn chỗ là một danh mục đã xoá thì khôi phục nó thay vì
+ * bắt người dùng đi tìm trong đống đã xoá.
+ */
+export async function findCategoryByName(
+  db: D1Database,
+  householdId: string,
+  kind: Direction,
+  name: string,
+): Promise<Category | null> {
+  const row = await db
+    .prepare(
+      `SELECT ${CATEGORY_COLUMNS} FROM categories WHERE household_id = ? AND kind = ? AND name = ?`,
+    )
+    .bind(householdId, kind, name)
     .first<CategoryRow>();
   return row ? mapCategory(row) : null;
 }
@@ -235,7 +269,14 @@ export async function insertCategory(
     )
     .bind(id, householdId, input.name, input.kind, input.icon, now)
     .run();
-  return { id, name: input.name, kind: input.kind, icon: input.icon, isArchived: false };
+  return {
+    id,
+    name: input.name,
+    kind: input.kind,
+    icon: input.icon,
+    isArchived: false,
+    deletedAt: null,
+  };
 }
 
 export async function updateCategory(
@@ -261,7 +302,10 @@ export async function updateCategory(
   if (sets.length === 0) return true;
   binds.push(householdId, id);
   const res = await db
-    .prepare(`UPDATE categories SET ${sets.join(', ')} WHERE household_id = ? AND id = ?`)
+    .prepare(
+      `UPDATE categories SET ${sets.join(', ')}
+       WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
+    )
     .bind(...binds)
     .run();
   return (res.meta.changes ?? 0) > 0;
@@ -279,13 +323,34 @@ export async function countTransactionsInCategory(
   return row?.n ?? 0;
 }
 
-export async function deleteCategory(
+/**
+ * Xoá mềm: hàng ở lại nên giao dịch cũ vẫn đọc được tên danh mục, còn ô chọn
+ * danh mục thì không thấy nó nữa. Không có hàm nào xoá hẳn một danh mục.
+ */
+export async function softDeleteCategory(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  now: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      'UPDATE categories SET deleted_at = ? WHERE household_id = ? AND id = ? AND deleted_at IS NULL',
+    )
+    .bind(now, householdId, id)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+export async function restoreCategory(
   db: D1Database,
   householdId: string,
   id: string,
 ): Promise<boolean> {
   const res = await db
-    .prepare('DELETE FROM categories WHERE household_id = ? AND id = ?')
+    .prepare(
+      'UPDATE categories SET deleted_at = NULL WHERE household_id = ? AND id = ? AND deleted_at IS NOT NULL',
+    )
     .bind(householdId, id)
     .run();
   return (res.meta.changes ?? 0) > 0;

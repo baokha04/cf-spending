@@ -39,6 +39,8 @@ export interface Category {
   kind: Direction;
   icon: string | null;
   isArchived: boolean;
+  /** Khác null nghĩa là đã xoá mềm: không chọn được nữa nhưng khôi phục lại được. */
+  deletedAt: number | null;
 }
 
 export interface Transaction {

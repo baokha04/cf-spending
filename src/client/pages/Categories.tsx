@@ -23,7 +23,11 @@ export function Categories() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setCategories((await api.categories(true)).categories);
+      // Trang này là nơi duy nhất nhìn thấy đủ ba trạng thái: đang dùng, đã lưu
+      // trữ và đã xoá.
+      setCategories(
+        (await api.categories({ includeArchived: true, includeDeleted: true })).categories,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được danh mục');
     } finally {
@@ -40,7 +44,10 @@ export function Categories() {
     setError(null);
     setNotice(null);
     try {
-      await api.createCategory({ name, kind, icon: icon || null });
+      const created = await api.createCategory({ name, kind, icon: icon || null });
+      if (created.restored) {
+        setNotice(`"${created.name}" trước đó đã bị xoá nên được khôi phục lại thay vì tạo mới.`);
+      }
       setName('');
       setIcon('');
       await load();
@@ -68,20 +75,31 @@ export function Categories() {
   }
 
   async function remove(category: Category) {
-    if (!confirm(`Xoá danh mục "${category.name}"?`)) return;
+    // Xoá mềm: hàng vẫn nằm trong bảng nên lời nhắc không cần doạ dẫm.
+    if (!confirm(`Xoá danh mục "${category.name}"? Vẫn khôi phục lại được.`)) return;
     setError(null);
     setNotice(null);
     try {
       const res = await api.deleteCategory(category.id);
-      // Danh mục còn giao dịch sẽ được lưu trữ thay vì xoá, để lịch sử giữ nguyên nhãn.
-      if (res.archived) {
-        setNotice(
-          `"${category.name}" còn ${res.transactions} giao dịch nên đã chuyển sang lưu trữ thay vì xoá hẳn.`,
-        );
-      }
+      setNotice(
+        res.transactions > 0
+          ? `Đã xoá "${category.name}". ${res.transactions} giao dịch cũ vẫn giữ nguyên nhãn này.`
+          : `Đã xoá "${category.name}".`,
+      );
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không xoá được danh mục');
+    }
+  }
+
+  async function restore(category: Category) {
+    setError(null);
+    setNotice(null);
+    try {
+      await api.restoreCategory(category.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không khôi phục được danh mục');
     }
   }
 
@@ -142,7 +160,11 @@ export function Categories() {
           return (
             <section className="card" key={group.kind}>
               <h2 className="card-title">{group.title}</h2>
-              <p className="card-sub">{rows.length} danh mục</p>
+              <p className="card-sub">
+                {rows.filter((c) => c.deletedAt === null).length} danh mục
+                {rows.some((c) => c.deletedAt !== null) &&
+                  ` · ${rows.filter((c) => c.deletedAt !== null).length} đã xoá`}
+              </p>
               {rows.length === 0 ? (
                 <p className="empty">Chưa có danh mục nào.</p>
               ) : (
@@ -194,28 +216,43 @@ export function Categories() {
                             </td>
                           </tr>
                         ) : (
-                          <tr key={c.id}>
+                          <tr key={c.id} className={c.deletedAt !== null ? 'deleted' : undefined}>
                             <td>
                               {c.icon ? `${c.icon} ` : ''}
                               {c.name}
                             </td>
                             <td>
-                              <span className="pill">{c.isArchived ? 'Đã lưu trữ' : 'Đang dùng'}</span>
+                              <span className={`pill${c.deletedAt !== null ? ' warn' : ''}`}>
+                                {c.deletedAt !== null
+                                  ? 'Đã xoá'
+                                  : c.isArchived
+                                    ? 'Đã lưu trữ'
+                                    : 'Đang dùng'}
+                              </span>
                             </td>
                             <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              <button
-                                type="button"
-                                className="ghost"
-                                onClick={() => setEdit({ id: c.id, name: c.name, icon: c.icon ?? '' })}
-                              >
-                                Sửa
-                              </button>
-                              <button type="button" className="ghost" onClick={() => void toggleArchive(c)}>
-                                {c.isArchived ? 'Dùng lại' : 'Lưu trữ'}
-                              </button>
-                              <button type="button" className="ghost danger" onClick={() => void remove(c)}>
-                                Xoá
-                              </button>
+                              {/* Danh mục đã xoá chỉ còn một đường ra: khôi phục. */}
+                              {c.deletedAt !== null ? (
+                                <button type="button" className="ghost" onClick={() => void restore(c)}>
+                                  Khôi phục
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    onClick={() => setEdit({ id: c.id, name: c.name, icon: c.icon ?? '' })}
+                                  >
+                                    Sửa
+                                  </button>
+                                  <button type="button" className="ghost" onClick={() => void toggleArchive(c)}>
+                                    {c.isArchived ? 'Dùng lại' : 'Lưu trữ'}
+                                  </button>
+                                  <button type="button" className="ghost danger" onClick={() => void remove(c)}>
+                                    Xoá
+                                  </button>
+                                </>
+                              )}
                             </td>
                           </tr>
                         ),

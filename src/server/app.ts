@@ -255,9 +255,11 @@ app.post('/household/invite-code/rotate', requireAuth, requireOwner, async (c) =
 /* =============================================================== categories */
 
 app.get('/categories', requireAuth, async (c) => {
-  const includeArchived = c.req.query('includeArchived') === '1';
   return c.json({
-    categories: await db.listCategories(c.env.DB, c.get('householdId'), includeArchived),
+    categories: await db.listCategories(c.env.DB, c.get('householdId'), {
+      includeArchived: c.req.query('includeArchived') === '1',
+      includeDeleted: c.req.query('includeDeleted') === '1',
+    }),
   });
 });
 
@@ -273,10 +275,27 @@ app.post('/categories', requireAuth, async (c) => {
     );
     return c.json(created, 201);
   } catch (err) {
-    if (String(err).includes('UNIQUE')) {
+    if (!String(err).includes('UNIQUE')) throw err;
+    // Chỗ bị chiếm có thể là một danh mục đã xoá — ràng buộc UNIQUE tính cả
+    // hàng đã xoá mềm. Khôi phục nó lại (kèm biểu tượng mới) thay vì bắt người
+    // dùng đi tìm trong danh sách đã xoá; tên trùng với danh mục đang dùng thì
+    // vẫn từ chối như cũ.
+    const existing = await db.findCategoryByName(
+      c.env.DB,
+      c.get('householdId'),
+      parsed.data.kind,
+      parsed.data.name,
+    );
+    if (!existing || existing.deletedAt === null) {
       return c.json({ error: 'Danh mục cùng tên và cùng loại đã tồn tại' }, 409);
     }
-    throw err;
+    await db.restoreCategory(c.env.DB, c.get('householdId'), existing.id);
+    await db.updateCategory(c.env.DB, c.get('householdId'), existing.id, {
+      icon: parsed.data.icon ?? null,
+      isArchived: false,
+    });
+    const restored = await db.getCategory(c.env.DB, c.get('householdId'), existing.id);
+    return c.json({ ...restored!, restored: true }, 200);
   }
 });
 
@@ -301,20 +320,26 @@ app.patch('/categories/:id', requireAuth, async (c) => {
   return c.json(await db.getCategory(c.env.DB, c.get('householdId'), c.req.param('id')));
 });
 
+/**
+ * Xoá danh mục cũng chỉ là xoá mềm: hàng ở lại nên giao dịch cũ giữ nguyên
+ * nhãn, còn ô chọn danh mục thì không thấy nó nữa. Trả về số giao dịch đang
+ * mang nhãn này để giao diện nói rõ hậu quả.
+ */
 app.delete('/categories/:id', requireAuth, async (c) => {
   const householdId = c.get('householdId');
   const id = c.req.param('id');
-  if (!(await db.getCategory(c.env.DB, householdId, id))) {
-    return c.json({ error: 'Không tìm thấy danh mục' }, 404);
-  }
-  // Còn giao dịch tham chiếu thì lưu trữ thay vì xoá, để lịch sử không mất nhãn.
   const used = await db.countTransactionsInCategory(c.env.DB, householdId, id);
-  if (used > 0) {
-    await db.updateCategory(c.env.DB, householdId, id, { isArchived: true });
-    return c.json({ archived: true, transactions: used });
-  }
-  await db.deleteCategory(c.env.DB, householdId, id);
-  return c.json({ deleted: true });
+  const ok = await db.softDeleteCategory(c.env.DB, householdId, id, Date.now());
+  if (!ok) return c.json({ error: 'Không tìm thấy danh mục' }, 404);
+  return c.json({ deleted: true, transactions: used });
+});
+
+app.post('/categories/:id/restore', requireAuth, async (c) => {
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+  const ok = await db.restoreCategory(c.env.DB, householdId, id);
+  if (!ok) return c.json({ error: 'Không tìm thấy danh mục đã xoá' }, 404);
+  return c.json(await db.getCategory(c.env.DB, householdId, id));
 });
 
 /* ============================================================= transactions */
@@ -391,8 +416,9 @@ async function validateCategory(
   direction: 'income' | 'expense' | undefined,
 ): Promise<string | null> {
   if (!categoryId) return null;
-  const category = await db.getCategory(env.DB, householdId, categoryId);
+  const category = await db.getCategory(env.DB, householdId, categoryId, true);
   if (!category) return 'Danh mục không tồn tại';
+  if (category.deletedAt !== null) return 'Danh mục đã bị xoá — khôi phục lại trước khi dùng';
   if (direction && category.kind !== direction) {
     return 'Danh mục không khớp với loại thu/chi của giao dịch';
   }
