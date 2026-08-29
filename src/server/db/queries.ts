@@ -33,6 +33,7 @@ export interface TransactionRow {
   created_by_name: string;
   created_at: number;
   updated_at: number;
+  deleted_at: number | null;
 }
 
 export function mapTransaction(row: TransactionRow): Transaction {
@@ -53,6 +54,7 @@ export function mapTransaction(row: TransactionRow): Transaction {
     createdByName: row.created_by_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
   };
 }
 
@@ -61,7 +63,7 @@ const TX_SELECT = `
          t.amount, t.direction, t.recurrence,
          t.category_id, c.name AS category_name,
          t.created_by, u.display_name AS created_by_name,
-         t.created_at, t.updated_at
+         t.created_at, t.updated_at, t.deleted_at
   FROM transactions t
   LEFT JOIN categories c ON c.id = t.category_id
   JOIN users u ON u.id = t.created_by
@@ -298,6 +300,8 @@ export interface TransactionFilter {
   recurrence?: Recurrence;
   categoryId?: string;
   q?: string;
+  /** Kèm cả giao dịch đã xoá mềm — danh sách hiển thị chúng ở dạng gạch ngang. */
+  includeDeleted?: boolean;
   limit: number;
   /** Keyset cursor dạng '<occurred_on>|<id>'. */
   cursor?: string;
@@ -308,7 +312,8 @@ export async function listTransactions(
   householdId: string,
   filter: TransactionFilter,
 ): Promise<{ items: Transaction[]; nextCursor: string | null }> {
-  const where = ['t.household_id = ?', 't.deleted_at IS NULL'];
+  const where = ['t.household_id = ?'];
+  if (!filter.includeDeleted) where.push('t.deleted_at IS NULL');
   const binds: unknown[] = [householdId];
 
   if (filter.from) {
@@ -369,9 +374,14 @@ export async function getTransaction(
   db: D1Database,
   householdId: string,
   id: string,
+  includeDeleted = false,
 ): Promise<Transaction | null> {
   const row = await db
-    .prepare(`${TX_SELECT} WHERE t.household_id = ? AND t.id = ? AND t.deleted_at IS NULL`)
+    .prepare(
+      `${TX_SELECT} WHERE t.household_id = ? AND t.id = ?${
+        includeDeleted ? '' : ' AND t.deleted_at IS NULL'
+      }`,
+    )
     .bind(householdId, id)
     .first<TransactionRow>();
   return row ? mapTransaction(row) : null;
@@ -480,6 +490,24 @@ export async function updateTransaction(
       `UPDATE transactions SET ${sets.join(', ')} WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
     )
     .bind(...binds)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/** Bỏ đánh dấu xoá. Trả về false khi giao dịch không tồn tại hoặc chưa từng bị xoá. */
+export async function restoreTransaction(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  now: number,
+  embedStatus: 'pending' | 'skipped',
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE transactions SET deleted_at = NULL, updated_at = ?, embed_status = ?
+       WHERE household_id = ? AND id = ? AND deleted_at IS NOT NULL`,
+    )
+    .bind(now, embedStatus, householdId, id)
     .run();
   return (res.meta.changes ?? 0) > 0;
 }

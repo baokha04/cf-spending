@@ -19,6 +19,7 @@ export function Transactions() {
   const [items, setItems] = useState<Transaction[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
+  const [copying, setCopying] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,6 +29,7 @@ export function Transactions() {
   const [recurrence, setRecurrence] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [q, setQ] = useState('');
+  const [showDeleted, setShowDeleted] = useState(true);
 
   const buildQuery = useCallback((): TransactionQuery => {
     const range = allMonths ? {} : monthRange(month);
@@ -37,9 +39,10 @@ export function Transactions() {
       recurrence: recurrence || undefined,
       categoryId: categoryId || undefined,
       q: q.trim() || undefined,
+      includeDeleted: showDeleted ? ('1' as const) : undefined,
       limit: PAGE_SIZE,
     };
-  }, [allMonths, month, direction, recurrence, categoryId, q]);
+  }, [allMonths, month, direction, recurrence, categoryId, q, showDeleted]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,16 +90,31 @@ export function Transactions() {
 
       <div className="grid grid-form">
         <section className="card">
-          <h2 className="card-title">{editing ? 'Sửa giao dịch' : 'Thêm giao dịch'}</h2>
-          <p className="card-sub">Ghi ngay khi vừa chi để không quên khoản nhỏ.</p>
+          <h2 className="card-title">
+            {editing ? 'Sửa giao dịch' : copying ? 'Sao chép giao dịch' : 'Thêm giao dịch'}
+          </h2>
+          <p className="card-sub">
+            {copying
+              ? 'Đã điền sẵn theo giao dịch được chọn, ngày đổi thành hôm nay. Sửa lại rồi lưu thành giao dịch mới.'
+              : 'Ghi ngay khi vừa chi để không quên khoản nhỏ.'}
+          </p>
           <TransactionForm
             categories={categories}
             editing={editing}
+            copying={copying}
             onSaved={() => {
               setEditing(null);
+              setCopying(null);
               void load();
             }}
-            onCancel={editing ? () => setEditing(null) : undefined}
+            onCancel={
+              editing || copying
+                ? () => {
+                    setEditing(null);
+                    setCopying(null);
+                  }
+                : undefined
+            }
           />
         </section>
 
@@ -162,6 +180,18 @@ export function Transactions() {
               <label htmlFor="f-q">Tìm trong nội dung</label>
               <input id="f-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="tiền điện…" />
             </div>
+            <div className="field">
+              <label htmlFor="f-deleted">
+                <input
+                  id="f-deleted"
+                  type="checkbox"
+                  checked={showDeleted}
+                  onChange={(e) => setShowDeleted(e.target.checked)}
+                  style={{ width: 'auto', marginRight: 6 }}
+                />
+                Hiện giao dịch đã xoá
+              </label>
+            </div>
           </div>
 
           {error && <div className="alert error">{error}</div>}
@@ -169,7 +199,18 @@ export function Transactions() {
             <p className="empty">Đang tải…</p>
           ) : (
             <>
-              <TransactionTable items={items} onChanged={() => void load()} onEdit={setEditing} />
+              <TransactionTable
+                items={items}
+                onChanged={() => void load()}
+                onEdit={(tx) => {
+                  setCopying(null);
+                  setEditing(tx);
+                }}
+                onCopy={(tx) => {
+                  setEditing(null);
+                  setCopying(tx);
+                }}
+              />
               {nextCursor && (
                 <div style={{ textAlign: 'center', marginTop: 12 }}>
                   <button type="button" onClick={() => void loadMore()}>

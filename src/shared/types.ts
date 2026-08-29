@@ -59,6 +59,8 @@ export interface Transaction {
   createdByName: string;
   createdAt: number;
   updatedAt: number;
+  /** Khác null nghĩa là đã xoá mềm: vẫn hiện trong danh sách nhưng không vào số liệu. */
+  deletedAt: number | null;
 }
 
 export interface TransactionPage {

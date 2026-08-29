@@ -69,6 +69,8 @@ export interface TransactionQuery {
   recurrence?: string;
   categoryId?: string;
   q?: string;
+  /** '1' để kèm cả giao dịch đã xoá mềm. */
+  includeDeleted?: '1';
   limit?: number;
   cursor?: string;
 }
@@ -111,6 +113,7 @@ export const api = {
     request<Transaction>(`/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTransaction: (id: string) =>
     request<{ deleted: boolean }>(`/transactions/${id}`, { method: 'DELETE' }),
+  restoreTransaction: (id: string) => post<Transaction>(`/transactions/${id}/restore`),
 
   dashboard: (month: string) => request<DashboardSummary>(`/dashboard/summary?month=${month}`),
 

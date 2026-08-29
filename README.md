@@ -14,7 +14,7 @@ khoản có thể vào chung một hộ gia đình qua mã mời để thấy ch
 | Trang | Làm gì |
 |---|---|
 | Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước |
-| Giao dịch | Nhập, sửa, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết |
+| Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
 | Danh mục | Thêm, **sửa tên và biểu tượng**, lưu trữ hoặc xoá danh mục |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
@@ -178,10 +178,11 @@ npm test        # Vitest chạy trên Workers runtime với D1 thật cục bộ
 npm run build   # typecheck + build production
 ```
 
-Bộ test phủ năm nhóm: xác thực và **cô lập dữ liệu giữa các hộ**, CRUD cùng kiểm tra
+Bộ test phủ sáu nhóm: xác thực và **cô lập dữ liệu giữa các hộ**, CRUD cùng kiểm tra
 dữ liệu đầu vào, độ chính xác của tổng hợp dashboard (gồm các mốc biên tháng, năm
-nhuận, và trường hợp tháng trước rỗng), chỉnh sửa danh mục (kể cả đổi tên trùng), và
-phần chi tiết giao dịch cùng báo cáo khoản lớn.
+nhuận, và trường hợp tháng trước rỗng), chỉnh sửa danh mục (kể cả đổi tên trùng),
+phần chi tiết giao dịch cùng báo cáo khoản lớn, và xoá mềm — khôi phục cùng việc
+giao dịch đã xoá không lọt vào bất kỳ số liệu tổng hợp nào.
 
 ## Cấu trúc
 
@@ -203,6 +204,18 @@ src/shared/types.ts         Kiểu dùng chung hai phía
 ```
 
 ## Vài quyết định đáng lưu ý
+
+**Xoá giao dịch chỉ là xoá mềm.** Không có đường nào xoá hẳn một giao dịch: `DELETE`
+đặt `deleted_at` rồi thôi. Bản ghi biến khỏi mọi số liệu (dashboard, khoản lớn, tìm
+kiếm — vector cũng bị gỡ khỏi Vectorize) nhưng vẫn nằm trong danh sách ở dạng gạch
+ngang, kèm nút **Khôi phục** đưa nó trở lại và đẩy vector lại. Ghi nhầm rồi xoá nhầm
+là chuyện thường ở sổ chi tiêu chung của cả nhà, nên nút xoá không được phép là thao
+tác một chiều. Bỏ tick "Hiện giao dịch đã xoá" nếu muốn danh sách gọn lại.
+
+**Sao chép giao dịch.** Nút *Sao chép* điền sẵn form bằng đúng nội dung, số tiền,
+danh mục và cả phần chi tiết của một giao dịch cũ, chỉ đổi ngày thành hôm nay, rồi
+lưu thành bản ghi **mới**. Tiền chợ, đổ xăng, tiền học thêm lặp lại gần như nguyên
+văn hàng tuần — gõ lại từ đầu mỗi lần là chỗ dễ bỏ sót nhất.
 
 **Khoản lớn tách riêng khỏi danh sách giao dịch.** Một khoản 12 triệu và một khoản
 30 nghìn cần mức ghi chép khác hẳn nhau. Form nhập tự mở phần chi tiết khi số tiền từ

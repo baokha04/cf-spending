@@ -326,6 +326,8 @@ const listQuerySchema = z.object({
   recurrence: z.enum(['monthly', 'one_off']).optional(),
   categoryId: z.string().min(1).optional(),
   q: z.string().trim().min(1).max(200).optional(),
+  /** '1' để danh sách kèm cả giao dịch đã xoá mềm. */
+  includeDeleted: z.literal('1').optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.string().min(1).optional(),
 });
@@ -334,7 +336,12 @@ app.get('/transactions', requireAuth, async (c) => {
   const raw = Object.fromEntries(new URL(c.req.url).searchParams.entries());
   const parsed = listQuerySchema.safeParse(raw);
   if (!parsed.success) return c.json({ error: formatZodError(parsed.error) }, 400);
-  return c.json(await db.listTransactions(c.env.DB, c.get('householdId'), parsed.data));
+  return c.json(
+    await db.listTransactions(c.env.DB, c.get('householdId'), {
+      ...parsed.data,
+      includeDeleted: parsed.data.includeDeleted === '1',
+    }),
+  );
 });
 
 /**
@@ -371,7 +378,7 @@ app.get('/transactions/large', requireAuth, async (c) => {
 });
 
 app.get('/transactions/:id', requireAuth, async (c) => {
-  const tx = await db.getTransaction(c.env.DB, c.get('householdId'), c.req.param('id'));
+  const tx = await db.getTransaction(c.env.DB, c.get('householdId'), c.req.param('id'), true);
   if (!tx) return c.json({ error: 'Không tìm thấy giao dịch' }, 404);
   return c.json(tx);
 });
@@ -446,13 +453,35 @@ app.patch('/transactions/:id', requireAuth, async (c) => {
   return c.json(await db.getTransaction(c.env.DB, householdId, id));
 });
 
+/**
+ * Xoá luôn là xoá mềm: bản ghi ở lại database với `deleted_at`, biến khỏi mọi
+ * số liệu tổng hợp nhưng vẫn hiện trong danh sách ở dạng gạch ngang và khôi
+ * phục lại được. Không có đường nào xoá hẳn một giao dịch.
+ */
 app.delete('/transactions/:id', requireAuth, async (c) => {
   const householdId = c.get('householdId');
   const id = c.req.param('id');
   const ok = await db.softDeleteTransaction(c.env.DB, householdId, id, Date.now());
   if (!ok) return c.json({ error: 'Không tìm thấy giao dịch' }, 404);
+  // Gỡ vector để giao dịch đã xoá không lọt vào tìm kiếm ngữ nghĩa và hỏi đáp.
   background(c, deleteTransactionVector(c.env, id));
   return c.json({ deleted: true });
+});
+
+app.post('/transactions/:id/restore', requireAuth, async (c) => {
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+  const ok = await db.restoreTransaction(
+    c.env.DB,
+    householdId,
+    id,
+    Date.now(),
+    aiEnabled(c.env) ? 'pending' : 'skipped',
+  );
+  if (!ok) return c.json({ error: 'Không tìm thấy giao dịch đã xoá' }, 404);
+  // Vector đã bị gỡ lúc xoá nên phải đẩy lại thì tìm kiếm mới thấy.
+  if (aiEnabled(c.env)) background(c, embedTransactionById(c.env, householdId, id));
+  return c.json(await db.getTransaction(c.env.DB, householdId, id));
 });
 
 /* ================================================================ dashboard */

@@ -25,6 +25,11 @@ interface Props {
   categories: Category[];
   /** Có giá trị nghĩa là đang sửa; null là thêm mới. */
   editing: Transaction | null;
+  /**
+   * Giao dịch dùng làm bản mẫu: form điền sẵn mọi thứ nhưng vẫn tạo bản ghi
+   * mới, ngày mặc định là hôm nay. Bỏ qua khi `editing` có giá trị.
+   */
+  copying?: Transaction | null;
   onSaved: () => void;
   onCancel?: () => void;
 }
@@ -46,47 +51,53 @@ interface FormState {
   categoryId: string;
 }
 
-function initialState(editing: Transaction | null): FormState {
-  return editing
-    ? {
-        occurredOn: editing.occurredOn,
-        note: editing.note,
-        detail: editing.detail,
-        payee: editing.payee,
-        paymentMethod: editing.paymentMethod ?? '',
-        amount: String(editing.amount),
-        direction: editing.direction,
-        recurrence: editing.recurrence,
-        categoryId: editing.categoryId ?? '',
-      }
-    : {
-        occurredOn: todayISO(),
-        note: '',
-        detail: '',
-        payee: '',
-        paymentMethod: '',
-        amount: '',
-        direction: 'expense',
-        recurrence: 'one_off',
-        categoryId: '',
-      };
+function fromTransaction(tx: Transaction, occurredOn: string): FormState {
+  return {
+    occurredOn,
+    note: tx.note,
+    detail: tx.detail,
+    payee: tx.payee,
+    paymentMethod: tx.paymentMethod ?? '',
+    amount: String(tx.amount),
+    direction: tx.direction,
+    recurrence: tx.recurrence,
+    categoryId: tx.categoryId ?? '',
+  };
 }
 
-export function TransactionForm({ categories, editing, onSaved, onCancel }: Props) {
-  const [form, setForm] = useState<FormState>(() => initialState(editing));
+function initialState(editing: Transaction | null, copying?: Transaction | null): FormState {
+  if (editing) return fromTransaction(editing, editing.occurredOn);
+  // Bản sao giữ nguyên nội dung nhưng nhận ngày hôm nay: khoản lặp lại như tiền
+  // chợ hay đổ xăng thường chỉ khác mỗi ngày.
+  if (copying) return fromTransaction(copying, todayISO());
+  return {
+    occurredOn: todayISO(),
+    note: '',
+    detail: '',
+    payee: '',
+    paymentMethod: '',
+    amount: '',
+    direction: 'expense',
+    recurrence: 'one_off',
+    categoryId: '',
+  };
+}
+
+export function TransactionForm({ categories, editing, copying, onSaved, onCancel }: Props) {
+  const [form, setForm] = useState<FormState>(() => initialState(editing, copying));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Người dùng đã tự bấm mở/đóng phần chi tiết chưa; null nghĩa là để tự quyết.
   const [detailOpen, setDetailOpen] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setForm(initialState(editing));
+    setForm(initialState(editing, copying));
     setDetailOpen(null);
-  }, [editing]);
+  }, [editing, copying]);
 
   const amountValue = parseAmount(form.amount);
   const isLarge = amountValue >= LARGE_AMOUNT;
-  const showDetails = detailOpen ?? (isLarge || hasDetails(editing));
+  const showDetails = detailOpen ?? (isLarge || hasDetails(editing ?? copying ?? null));
 
   // Danh mục phải cùng chiều thu/chi với giao dịch, nếu không backend sẽ từ chối.
   const options = categories.filter((c) => c.kind === form.direction);

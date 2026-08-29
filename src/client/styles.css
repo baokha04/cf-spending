@@ -178,6 +178,10 @@ main {
 .card-sub { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px; }
 
 .grid { display: grid; gap: 16px; }
+/* Ô lưới mặc định min-width:auto nên không co lại được dưới bề rộng nội dung:
+   thiếu dòng này thì bảng giao dịch đẩy cả trang trượt ngang thay vì tự cuộn
+   trong .table-scroll. */
+.grid > * { min-width: 0; }
 .grid-kpi { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .grid-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 /* Cột form + cột danh sách ở trang Giao dịch. */
@@ -391,6 +395,20 @@ button.danger { color: var(--critical); }
 .tx-detail-grid dt { color: var(--text-secondary); font-size: 0.78rem; }
 .tx-detail-grid dd { margin: 0; overflow-wrap: anywhere; }
 .tx-detail-row > td { background: var(--surface); padding-top: 0; }
+
+/* ----------------------------------------------------- giao dịch đã xoá mềm
+
+   Xoá là xoá mềm nên dòng vẫn ở lại danh sách: gạch ngang và làm mờ để thấy
+   ngay là đã bỏ, nhưng vẫn đọc được và khôi phục được. Gạch ngang không lan
+   vào .pill hay button vì chúng là inline-block.
+   ---------------------------------------------------------------------- */
+
+tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
+
+.tx-card.deleted { border-style: dashed; }
+.tx-card.deleted .tx-note,
+.tx-card.deleted .tx-amount { text-decoration: line-through; color: var(--text-muted); }
+.tx-card.deleted .tx-meta > span:not(.pill) { text-decoration: line-through; }
 
 /* ------------------------------------------------------------ khoản lớn */
 

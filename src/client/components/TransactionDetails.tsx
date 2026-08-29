@@ -19,6 +19,7 @@ export function TransactionDetails({ tx }: { tx: Transaction }) {
   if (tx.paymentMethod) rows.push(['Hình thức', PAYMENT_METHOD_LABEL[tx.paymentMethod]]);
   rows.push(['Danh mục', tx.categoryName ?? 'Chưa phân loại']);
   rows.push(['Người nhập', tx.createdByName]);
+  if (tx.deletedAt !== null) rows.push(['Đã xoá lúc', dateTimeLabel(tx.deletedAt)]);
   rows.push([
     'Ghi lúc',
     // Chỉ nói "sửa lúc" khi thực sự có sửa; chênh lệch dưới một giây là do
