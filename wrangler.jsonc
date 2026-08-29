@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-spending",
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": "./dist",
+
+  // Tạo bằng: wrangler d1 create cf-spending  → dán database_id vào đây
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cf-spending",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Tạo bằng: wrangler vectorize create spending-tx --dimensions=1024 --metric=cosine
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "spending-tx"
+    }
+  ],
+
+  "ai": { "binding": "AI" },
+
+  "vars": {
+    // "off" để bỏ qua embedding/RAG khi dev cục bộ (Vectorize không có bản mô phỏng local)
+    "AI_FEATURES": "on"
+  }
+}
