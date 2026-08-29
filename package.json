@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "cf:setup": "node scripts/cf-setup.mjs",
     "dev": "vite",
     "dev:api": "wrangler pages dev --port 8788",
     "build": "tsc --noEmit && vite build",
