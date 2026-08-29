@@ -85,7 +85,7 @@ export function Transactions() {
         <h1>Giao dịch</h1>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'minmax(280px, 340px) 1fr', alignItems: 'start' }}>
+      <div className="grid grid-form">
         <section className="card">
           <h2 className="card-title">{editing ? 'Sửa giao dịch' : 'Thêm giao dịch'}</h2>
           <p className="card-sub">Ghi ngay khi vừa chi để không quên khoản nhỏ.</p>
