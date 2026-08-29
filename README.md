@@ -33,7 +33,8 @@ thứ đã có trước khi tạo, nên gọi lần hai không sinh tài nguyên
 3. tạo chỉ mục Vectorize `spending-tx` **1024 chiều, cosine** cùng hai chỉ mục
    metadata `household_id` và `occurred_on` (thiếu hai cái này là truy vấn không lọc
    được theo hộ);
-4. áp migration cho D1 cục bộ.
+4. tạo **project Pages** `cf-spending` với nhánh production là nhánh mặc định của repo;
+5. áp migration cho D1 cục bộ.
 
 | Tuỳ chọn | Tác dụng |
 |---|---|
@@ -55,6 +56,8 @@ npm run db:migrate                          # áp migration cho bản trên Clou
 npx wrangler vectorize create spending-tx --dimensions=1024 --metric=cosine
 npx wrangler vectorize create-metadata-index spending-tx --property-name=household_id --type=string
 npx wrangler vectorize create-metadata-index spending-tx --property-name=occurred_on  --type=string
+
+npx wrangler pages project create cf-spending --production-branch=dev
 
 cp .dev.vars.example .dev.vars
 ```
@@ -84,12 +87,40 @@ npm run dev              # cửa sổ 2 — http://localhost:5173
 
 ## Triển khai
 
+App chạy trên **Cloudflare Pages**, không phải Worker: API nằm ở `functions/api/[[path]].ts`
+và chỉ Pages mới hiểu thư mục `functions/`. Loại project phải chọn đúng ngay từ đầu.
+
+Deploy từ máy mình:
+
 ```bash
-npm run deploy
+npm run deploy      # = npm run build && wrangler pages deploy
 ```
 
-Trong dashboard Cloudflare Pages, gắn ba binding cho project: `DB` (D1), `VECTORIZE`
-(chỉ mục `spending-tx`), `AI` (Workers AI), và biến `AI_FEATURES=on`.
+Deploy tự động mỗi lần push thì nối repo vào **project Pages** (Workers & Pages → Pages
+→ Connect to Git), với:
+
+| Thiết lập | Giá trị |
+|---|---|
+| Framework preset | None |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Root directory | (để trống) |
+
+Rồi trong Settings của project Pages, gắn ba binding cho cả Production lẫn Preview:
+`DB` (D1 `cf-spending`), `VECTORIZE` (chỉ mục `spending-tx`), `AI` (Workers AI), và biến
+`AI_FEATURES=on`. Pages lấy binding từ dashboard chứ không đọc `wrangler.jsonc`, nên
+`database_id` trong file đó chỉ phục vụ máy mình — không cần commit id thật.
+
+### Build lỗi "Missing entry-point to Worker script or to assets directory"
+
+Nghĩa là repo đang được deploy như một **Worker** (Workers Builds) chứ không phải Pages.
+Workers Builds chạy `npx wrangler deploy`, mà lệnh đó đòi `main` hoặc `assets` trong
+`wrangler.jsonc` — repo này cố tình không có, vì nó dùng `pages_build_output_dir`. Import
+repo từ mục Workers trên dashboard là dính lỗi này.
+
+Cách sửa: xoá project Worker vừa tạo, rồi tạo lại đúng loại Pages — `npm run cf:setup`
+làm sẵn (hoặc `npx wrangler pages project create cf-spending`), sau đó vào project Pages
+đó Connect to Git theo bảng trên.
 
 ## Kiểm thử
 

@@ -14,6 +14,7 @@ const INDEX_NAME = 'spending-tx';
 const DIMENSIONS = 1024; // khớp @cf/baai/bge-m3
 const METRIC = 'cosine';
 const METADATA_PROPS = ['household_id', 'occurred_on'];
+const PAGES_PROJECT = 'cf-spending';
 const PLACEHOLDER = 'REPLACE_WITH_YOUR_D1_DATABASE_ID';
 
 const args = new Set(process.argv.slice(2));
@@ -87,6 +88,16 @@ function parseJson(text) {
 function captureJson(argv) {
   const { code, stdout, stderr } = capture(argv);
   return { code, data: parseJson(stdout) ?? parseJson(stderr), stderr: stderr || stdout };
+}
+
+/** Nhánh mặc định của repo, dùng làm nhánh production cho Pages. */
+function productionBranch() {
+  for (const argv of [['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], ['branch', '--show-current']]) {
+    const res = spawnSync('git', argv, { cwd: ROOT, encoding: 'utf8' });
+    const name = (res.stdout ?? '').trim().replace(/^origin\//, '');
+    if (res.status === 0 && name) return name;
+  }
+  return 'main';
 }
 
 // ── 1. Phụ thuộc ────────────────────────────────────────────────────────────
@@ -236,7 +247,35 @@ if (DRY_RUN) {
   }
 }
 
-// ── 6. Migration ────────────────────────────────────────────────────────────
+// ── 6. Pages project ────────────────────────────────────────────────────────
+// App chạy trên Pages (có thư mục functions/). Tạo sẵn project Pages ở đây để
+// khỏi lỡ tay tạo nhầm Worker trên dashboard — Workers Builds chạy
+// `wrangler deploy` và sẽ chết với "Missing entry-point to Worker script".
+heading(`Project Pages "${PAGES_PROJECT}"`);
+if (DRY_RUN) {
+  info('(dry-run) npx wrangler pages project list');
+  info(`(dry-run) tạo project Pages ${PAGES_PROJECT} nếu chưa có`);
+} else {
+  const branch = productionBranch();
+  const listed = capture(['pages', 'project', 'list']);
+  const exists = new RegExp(`(^|\\s|\\|)${PAGES_PROJECT}(\\s|\\||$)`, 'm').test(listed.stdout);
+  if (listed.code !== 0) {
+    warn('Không liệt kê được project Pages — tạo tay trên dashboard (Workers & Pages → Pages).');
+  } else if (exists) {
+    ok('Đã có sẵn');
+  } else {
+    const created = run(
+      'npx',
+      ['--no-install', 'wrangler', 'pages', 'project', 'create', PAGES_PROJECT, `--production-branch=${branch}`],
+      { allowFailure: true },
+    );
+    if (created) ok(`Đã tạo, nhánh production là ${branch}`);
+    else warn(`Chưa tạo được project Pages — chạy tay: npx wrangler pages project create ${PAGES_PROJECT} --production-branch=${branch}`);
+  }
+  info('Nhớ gắn binding DB / VECTORIZE / AI và biến AI_FEATURES=on trong Settings của project Pages.');
+}
+
+// ── 7. Migration ────────────────────────────────────────────────────────────
 heading('Áp migration cho D1');
 run('npx', ['--no-install', 'wrangler', 'd1', 'migrations', 'apply', DB_NAME, '--local']);
 if (!DRY_RUN) ok('Xong bản local');
