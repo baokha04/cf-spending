@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Category, Direction } from '../../shared/types';
 import { api } from '../lib/api';
+import { IconPicker } from '../components/IconPicker';
 
 /** Trạng thái ô sửa tại chỗ của một danh mục. */
 interface EditState {
@@ -129,15 +130,18 @@ export function Categories() {
 
       <section className="card">
         <h2 className="card-title">Thêm danh mục</h2>
-        <p className="card-sub">Tên không được trùng trong cùng một loại thu hoặc chi.</p>
+        <p className="card-sub">
+          Tên không được trùng trong cùng một loại thu hoặc chi. Biểu tượng chọn từ danh sách có
+          sẵn.
+        </p>
         <form onSubmit={create} className="toolbar" style={{ marginBottom: 0 }}>
           <div className="field" style={{ flex: '1 1 200px' }}>
             <label htmlFor="c-name">Tên</label>
             <input id="c-name" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
           </div>
-          <div className="field" style={{ width: 90 }}>
+          <div className="field" style={{ width: 'auto' }}>
             <label htmlFor="c-icon">Biểu tượng</label>
-            <input id="c-icon" maxLength={4} placeholder="🍜" value={icon} onChange={(e) => setIcon(e.target.value)} />
+            <IconPicker id="c-icon" value={icon} onChange={setIcon} />
           </div>
           <div className="field" style={{ width: 130 }}>
             <label htmlFor="c-kind">Loại</label>
@@ -168,7 +172,9 @@ export function Categories() {
               {rows.length === 0 ? (
                 <p className="empty">Chưa có danh mục nào.</p>
               ) : (
-                <div className="table-scroll">
+                /* Bảng chọn biểu tượng nổi ra ngoài dòng đang sửa, mà
+                   .table-scroll thì cắt mất phần tràn — bỏ cuộn trong lúc sửa. */
+                <div className={`table-scroll${edit ? ' popover-open' : ''}`}>
                   <table>
                     <thead>
                       <tr>
@@ -185,14 +191,12 @@ export function Categories() {
                                 mọi giao dịch đang gắn với danh mục này. */}
                             <td colSpan={3}>
                               <form onSubmit={saveEdit} className="toolbar" style={{ marginBottom: 0 }}>
-                                <div className="field" style={{ width: 90 }}>
+                                <div className="field" style={{ width: 'auto' }}>
                                   <label htmlFor="c-edit-icon">Biểu tượng</label>
-                                  <input
+                                  <IconPicker
                                     id="c-edit-icon"
-                                    maxLength={4}
-                                    placeholder="🍜"
                                     value={edit.icon}
-                                    onChange={(e) => setEdit({ ...edit, icon: e.target.value })}
+                                    onChange={(next) => setEdit({ ...edit, icon: next })}
                                   />
                                 </div>
                                 <div className="field" style={{ flex: '1 1 200px' }}>
