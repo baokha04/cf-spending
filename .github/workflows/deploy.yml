@@ -39,6 +39,22 @@ jobs:
       - run: npm test
       - run: npm run build
 
+      # Secret rỗng thì wrangler chỉ báo "Not logged in" — câu đó không hề gợi ý
+      # nguyên nhân, nên chặn ở đây và nói thẳng chỗ cần sửa.
+      - name: Kiểm tra secret Cloudflare
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ]  || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Thiếu secret:$missing — thêm ở Settings → Secrets and variables → Actions → New repository secret (phải là repository secret, không phải environment secret)."
+            exit 1
+          fi
+          echo "Đã có cả hai secret."
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       # Deploy sẽ hỏng nếu project Pages chưa tồn tại, mà lần đầu thì chưa có.
       - name: Đảm bảo project Pages tồn tại
         run: |
