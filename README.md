@@ -21,38 +21,52 @@ vào chung một hộ gia đình qua mã mời để thấy chung số liệu.
 
 ```bash
 npm install
+npm run cf:setup
 ```
 
-### 1. Tạo cơ sở dữ liệu D1
+`cf:setup` dựng hết phần Cloudflare và chạy lại được nhiều lần — mỗi bước kiểm tra
+thứ đã có trước khi tạo, nên gọi lần hai không sinh tài nguyên trùng:
+
+1. tạo `.dev.vars` từ `.dev.vars.example` (đặt `AI_FEATURES=off`) nếu chưa có;
+2. tạo D1 `cf-spending` rồi ghi `database_id` vào `wrangler.jsonc` (không đè lên id
+   đã điền sẵn — nếu khác thì chỉ báo lại);
+3. tạo chỉ mục Vectorize `spending-tx` **1024 chiều, cosine** cùng hai chỉ mục
+   metadata `household_id` và `occurred_on` (thiếu hai cái này là truy vấn không lọc
+   được theo hộ);
+4. áp migration cho D1 cục bộ.
+
+| Tuỳ chọn | Tác dụng |
+|---|---|
+| `npm run cf:setup -- --local-only` | Chỉ chuẩn bị máy mình, không đụng tài khoản Cloudflare |
+| `npm run cf:setup -- --remote` | Áp migration cho cả D1 trên Cloudflare |
+| `npm run cf:setup -- --dry-run` | In những lệnh sẽ chạy rồi dừng |
+
+Script cần `npx wrangler login` sẵn (hoặc `CLOUDFLARE_API_TOKEN` +
+`CLOUDFLARE_ACCOUNT_ID`); chưa đăng nhập thì nó dừng và nhắc, trừ khi chạy `--local-only`.
+
+<details>
+<summary>Làm tay từng bước</summary>
 
 ```bash
-npx wrangler d1 create cf-spending
-```
+npx wrangler d1 create cf-spending          # chép database_id vào wrangler.jsonc
+npm run db:migrate:local                    # áp migration cho bản local
+npm run db:migrate                          # áp migration cho bản trên Cloudflare
 
-Chép `database_id` in ra rồi thay vào `wrangler.jsonc` (chỗ `REPLACE_WITH_YOUR_D1_DATABASE_ID`).
-
-```bash
-npm run db:migrate:local   # áp migration cho bản local
-npm run db:migrate         # áp migration cho bản trên Cloudflare
-```
-
-### 2. Tạo chỉ mục Vectorize
-
-Số chiều phải là **1024** cho khớp với model `@cf/baai/bge-m3`. Hai chỉ mục metadata
-là bắt buộc — không có chúng thì không lọc được theo hộ gia đình khi truy vấn.
-
-```bash
 npx wrangler vectorize create spending-tx --dimensions=1024 --metric=cosine
 npx wrangler vectorize create-metadata-index spending-tx --property-name=household_id --type=string
 npx wrangler vectorize create-metadata-index spending-tx --property-name=occurred_on  --type=string
+
+cp .dev.vars.example .dev.vars
 ```
+
+</details>
 
 ## Phát triển cục bộ
 
-Vectorize và Workers AI **không có bản mô phỏng local**. Tắt chúng đi để làm việc offline:
+Vectorize và Workers AI **không có bản mô phỏng local**. `cf:setup` đã đặt sẵn
+`AI_FEATURES=off` trong `.dev.vars` để làm việc offline:
 
 ```bash
-cp .dev.vars.example .dev.vars    # đặt AI_FEATURES=off
 npm run build
 npx wrangler pages dev            # http://localhost:8788
 ```
@@ -92,6 +106,7 @@ năm nhuận, và trường hợp tháng trước rỗng).
 
 ```
 functions/api/[[path]].ts   Cửa ngõ Pages Function, chuyển tiếp cho Hono
+scripts/cf-setup.mjs        Dựng D1 + Vectorize + .dev.vars (npm run cf:setup)
 migrations/                 Migration D1
 src/server/
   app.ts                    Toàn bộ route
