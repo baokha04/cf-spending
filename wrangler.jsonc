@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "cf-spending",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "database_id": "9e53ce45-4b33-4e49-a1db-719ff826872f",
       "migrations_dir": "migrations"
     }
   ],
