@@ -7,6 +7,9 @@
 #   CLOUDFLARE_ACCOUNT_ID  account id lấy ở trang chủ dashboard
 name: Deploy Pages
 
+env:
+  WRANGLER_SEND_METRICS: "false"
+
 on:
   push:
     branches: [dev]
@@ -35,6 +38,18 @@ jobs:
       # Chặn trước: hỏng test hoặc hỏng type thì đừng đẩy lên production.
       - run: npm test
       - run: npm run build
+
+      # Deploy sẽ hỏng nếu project Pages chưa tồn tại, mà lần đầu thì chưa có.
+      - name: Đảm bảo project Pages tồn tại
+        run: |
+          if npx wrangler pages project list | grep -qE '(^|[[:space:]|])cf-spending([[:space:]|]|$)'; then
+            echo "Project cf-spending đã có"
+          else
+            npx wrangler pages project create cf-spending --production-branch=dev
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: wrangler pages deploy
         run: >

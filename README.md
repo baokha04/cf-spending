@@ -105,8 +105,8 @@ npm run deploy      # = npm run build && wrangler pages deploy
 ```
 
 Deploy tự động: `.github/workflows/deploy.yml` chạy mỗi lần push lên `dev` (và chạy tay
-được qua Actions → Deploy Pages). Nó cài dependency, chạy test, build, rồi
-`wrangler pages deploy`. Thêm hai secret trong repo (Settings → Secrets and variables →
+được qua Actions → Deploy Pages). Nó cài dependency, chạy test, build, tạo project Pages
+nếu chưa có, rồi `wrangler pages deploy`. Thêm hai secret trong repo (Settings → Secrets and variables →
 Actions):
 
 | Secret | Lấy ở đâu |
