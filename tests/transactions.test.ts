@@ -243,28 +243,47 @@ describe('danh mục', () => {
     ).toBe(201);
   });
 
-  it('danh mục còn giao dịch thì được lưu trữ chứ không xoá hẳn', async () => {
+  it('xoá danh mục là xoá mềm, giao dịch cũ vẫn giữ nhãn', async () => {
     const s = await registerOwner('a@example.com', 'Nhà A');
     const categoryId = await expenseCategory(s);
-    await addTransaction(s, { occurredOn: '2026-08-10', amount: 1000, categoryId });
+    const txId = await addTransaction(s, { occurredOn: '2026-08-10', amount: 1000, categoryId });
 
     const res = await call(`/api/categories/${categoryId}`, { method: 'DELETE' }, s.cookie);
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ archived: true, transactions: 1 });
+    expect(await res.json()).toMatchObject({ deleted: true, transactions: 1 });
 
-    const all = (await (await call('/api/categories?includeArchived=1', {}, s.cookie)).json()) as {
-      categories: Array<{ id: string; isArchived: boolean }>;
+    // Danh sách mặc định không còn thấy nó, kể cả khi xin luôn phần lưu trữ.
+    const visible = (await (
+      await call('/api/categories?includeArchived=1', {}, s.cookie)
+    ).json()) as { categories: Array<{ id: string }> };
+    expect(visible.categories.find((c) => c.id === categoryId)).toBeUndefined();
+
+    const all = (await (
+      await call('/api/categories?includeArchived=1&includeDeleted=1', {}, s.cookie)
+    ).json()) as { categories: Array<{ id: string; deletedAt: number | null }> };
+    expect(all.categories.find((c) => c.id === categoryId)?.deletedAt).toEqual(expect.any(Number));
+
+    // Giao dịch cũ vẫn đọc được tên danh mục.
+    const tx = (await (await call(`/api/transactions/${txId}`, {}, s.cookie)).json()) as {
+      categoryId: string;
+      categoryName: string | null;
     };
-    expect(all.categories.find((c) => c.id === categoryId)?.isArchived).toBe(true);
+    expect(tx.categoryId).toBe(categoryId);
+    expect(tx.categoryName).not.toBeNull();
   });
 
-  it('danh mục chưa dùng thì xoá hẳn', async () => {
+  it('danh mục chưa dùng cũng chỉ xoá mềm', async () => {
     const s = await registerOwner('a@example.com', 'Nhà A');
     const created = (await (
       await call('/api/categories', { method: 'POST', body: json({ name: 'Tạm', kind: 'expense' }) }, s.cookie)
     ).json()) as { id: string };
 
     const res = await call(`/api/categories/${created.id}`, { method: 'DELETE' }, s.cookie);
-    expect(await res.json()).toMatchObject({ deleted: true });
+    expect(await res.json()).toMatchObject({ deleted: true, transactions: 0 });
+
+    const all = (await (
+      await call('/api/categories?includeArchived=1&includeDeleted=1', {}, s.cookie)
+    ).json()) as { categories: Array<{ id: string }> };
+    expect(all.categories.find((c) => c.id === created.id)).toBeDefined();
   });
 });

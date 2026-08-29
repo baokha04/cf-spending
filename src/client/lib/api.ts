@@ -2,8 +2,10 @@ import type {
   AskResponse,
   Category,
   DashboardSummary,
+  LargeTransactionsResponse,
   MeResponse,
   Member,
+  PaymentMethod,
   SearchResponse,
   Transaction,
   TransactionPage,
@@ -51,6 +53,9 @@ function query(params: Record<string, string | number | undefined | null>): stri
 export interface TransactionInput {
   occurredOn: string;
   note: string;
+  detail: string;
+  payee: string;
+  paymentMethod: PaymentMethod | null;
   amount: number | string;
   direction: 'income' | 'expense';
   recurrence: 'monthly' | 'one_off';
@@ -64,6 +69,8 @@ export interface TransactionQuery {
   recurrence?: string;
   categoryId?: string;
   q?: string;
+  /** '1' để kèm cả giao dịch đã xoá mềm. */
+  includeDeleted?: '1';
   limit?: number;
   cursor?: string;
 }
@@ -85,24 +92,33 @@ export const api = {
   joinHousehold: (inviteCode: string) => post<MeResponse>('/household/join', { inviteCode }),
   rotateInviteCode: () => post<{ inviteCode: string }>('/household/invite-code/rotate'),
 
-  categories: (includeArchived = false) =>
-    request<{ categories: Category[] }>(`/categories${includeArchived ? '?includeArchived=1' : ''}`),
+  categories: (options: { includeArchived?: boolean; includeDeleted?: boolean } = {}) =>
+    request<{ categories: Category[] }>(
+      `/categories${query({
+        includeArchived: options.includeArchived ? '1' : undefined,
+        includeDeleted: options.includeDeleted ? '1' : undefined,
+      })}`,
+    ),
+  /** `restored` báo rằng tên này thuộc một danh mục đã xoá và nó vừa được dựng lại. */
   createCategory: (body: { name: string; kind: 'income' | 'expense'; icon?: string | null }) =>
-    post<Category>('/categories', body),
+    post<Category & { restored?: boolean }>('/categories', body),
   updateCategory: (id: string, body: { name?: string; icon?: string | null; isArchived?: boolean }) =>
     request<Category>(`/categories/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteCategory: (id: string) =>
-    request<{ deleted?: boolean; archived?: boolean; transactions?: number }>(`/categories/${id}`, {
-      method: 'DELETE',
-    }),
+    request<{ deleted: boolean; transactions: number }>(`/categories/${id}`, { method: 'DELETE' }),
+  restoreCategory: (id: string) => post<Category>(`/categories/${id}/restore`),
 
   transactions: (q: TransactionQuery = {}) =>
     request<TransactionPage>(`/transactions${query({ ...q })}`),
+  transaction: (id: string) => request<Transaction>(`/transactions/${id}`),
+  largeTransactions: (q: { month?: string; min?: number; limit?: number } = {}) =>
+    request<LargeTransactionsResponse>(`/transactions/large${query({ ...q })}`),
   createTransaction: (body: TransactionInput) => post<Transaction>('/transactions', body),
   updateTransaction: (id: string, body: Partial<TransactionInput>) =>
     request<Transaction>(`/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTransaction: (id: string) =>
     request<{ deleted: boolean }>(`/transactions/${id}`, { method: 'DELETE' }),
+  restoreTransaction: (id: string) => post<Transaction>(`/transactions/${id}/restore`),
 
   dashboard: (month: string) => request<DashboardSummary>(`/dashboard/summary?month=${month}`),
 

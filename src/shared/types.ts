@@ -2,6 +2,8 @@
 
 export type Direction = 'income' | 'expense';
 export type Recurrence = 'monthly' | 'one_off';
+/** Hình thức thanh toán; null nghĩa là chưa ghi. */
+export type PaymentMethod = 'cash' | 'bank' | 'card' | 'ewallet' | 'other';
 export type MemberRole = 'owner' | 'member';
 
 export interface SessionUser {
@@ -37,12 +39,19 @@ export interface Category {
   kind: Direction;
   icon: string | null;
   isArchived: boolean;
+  /** Khác null nghĩa là đã xoá mềm: không chọn được nữa nhưng khôi phục lại được. */
+  deletedAt: number | null;
 }
 
 export interface Transaction {
   id: string;
   occurredOn: string; // YYYY-MM-DD
   note: string;
+  /** Mô tả dài: lý do chi, gồm những gì, kèm chứng từ nào… Rỗng là chưa ghi. */
+  detail: string;
+  /** Trả cho ai / nhận từ đâu. Rỗng là chưa ghi. */
+  payee: string;
+  paymentMethod: PaymentMethod | null;
   amount: number; // đồng, luôn dương
   direction: Direction;
   recurrence: Recurrence;
@@ -52,6 +61,8 @@ export interface Transaction {
   createdByName: string;
   createdAt: number;
   updatedAt: number;
+  /** Khác null nghĩa là đã xoá mềm: vẫn hiện trong danh sách nhưng không vào số liệu. */
+  deletedAt: number | null;
 }
 
 export interface TransactionPage {
@@ -93,6 +104,27 @@ export interface DashboardSummary {
   byCategory: CategoryBreakdownRow[];
   dailyExpense: DailyPoint[];
   recent: Transaction[];
+}
+
+/** Một chiều thu hoặc chi trong báo cáo khoản lớn. */
+export interface LargeTransactionGroup {
+  items: Transaction[];
+  /** Tổng của riêng các khoản vượt ngưỡng. */
+  total: number;
+  /** Tổng toàn tháng của chiều này, để tính tỷ trọng. */
+  monthTotal: number;
+  count: number;
+  monthCount: number;
+  /** Số khoản lớn chưa ghi chi tiết — phần cần bổ sung thông tin. */
+  missingDetail: number;
+}
+
+export interface LargeTransactionsResponse {
+  month: string;
+  threshold: number;
+  currency: string;
+  income: LargeTransactionGroup;
+  expense: LargeTransactionGroup;
 }
 
 export interface SearchHit {

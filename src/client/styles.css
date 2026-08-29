@@ -178,6 +178,10 @@ main {
 .card-sub { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px; }
 
 .grid { display: grid; gap: 16px; }
+/* Ô lưới mặc định min-width:auto nên không co lại được dưới bề rộng nội dung:
+   thiếu dòng này thì bảng giao dịch đẩy cả trang trượt ngang thay vì tự cuộn
+   trong .table-scroll. */
+.grid > * { min-width: 0; }
 .grid-kpi { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .grid-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 /* Cột form + cột danh sách ở trang Giao dịch. */
@@ -339,6 +343,136 @@ button.danger { color: var(--critical); }
   background: var(--surface-2);
   padding: 4px 10px;
   border-radius: 6px;
+}
+
+/* ------------------------------------------------- chi tiết một khoản thu/chi */
+
+/* Khối "Chi tiết khoản này" trong form nhập, đóng/mở theo nhu cầu. */
+.detail-block {
+  border-top: 1px solid var(--border);
+  margin: 4px 0 12px;
+  padding-top: 10px;
+}
+.detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-left: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pill.warn { color: var(--critical); border-color: var(--critical); }
+
+/* Chấm nhỏ trên nút "Chi tiết" báo khoản đó đã ghi thông tin bổ sung. */
+.has-detail {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: var(--focus);
+  vertical-align: middle;
+}
+
+.tx-details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 10px 12px;
+  margin: 8px 0;
+  font-size: 0.86rem;
+}
+.tx-detail-text { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tx-detail-text.muted { color: var(--text-muted); }
+.tx-detail-grid {
+  display: grid;
+  gap: 6px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 0;
+}
+.tx-detail-grid dt { color: var(--text-secondary); font-size: 0.78rem; }
+.tx-detail-grid dd { margin: 0; overflow-wrap: anywhere; }
+.tx-detail-row > td { background: var(--surface); padding-top: 0; }
+
+/* ----------------------------------------------------- giao dịch đã xoá mềm
+
+   Xoá là xoá mềm nên dòng vẫn ở lại danh sách: gạch ngang và làm mờ để thấy
+   ngay là đã bỏ, nhưng vẫn đọc được và khôi phục được. Gạch ngang không lan
+   vào .pill hay button vì chúng là inline-block.
+   ---------------------------------------------------------------------- */
+
+tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
+
+.tx-card.deleted { border-style: dashed; }
+.tx-card.deleted .tx-note,
+.tx-card.deleted .tx-amount { text-decoration: line-through; color: var(--text-muted); }
+.tx-card.deleted .tx-meta > span:not(.pill) { text-decoration: line-through; }
+
+/* ------------------------------------------------------------ khoản lớn */
+
+.large-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.large-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: var(--surface);
+}
+/* Khoản chưa ghi chi tiết: viền trái đậm để lướt mắt là thấy ngay việc cần làm. */
+.large-item.missing { border-left: 3px solid var(--critical); }
+
+.large-head { display: flex; align-items: baseline; gap: 12px; }
+.large-note { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.large-amount {
+  margin-left: auto;
+  flex: none;
+  font-size: 1.05rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.large-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  margin: 8px 0 6px;
+  overflow: hidden;
+}
+.large-bar span { display: block; height: 100%; background: var(--series-current); }
+
+.large-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.large-meta .dot { color: var(--text-muted); }
+
+.large-detail {
+  margin: 8px 0 0;
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.large-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.large-by { font-size: 0.78rem; color: var(--text-muted); }
+.large-actions button { margin-left: auto; }
+
+.large-editor {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 /* ================================================================ điện thoại
@@ -503,6 +637,9 @@ button.danger { color: var(--critical); }
   .page-head .toolbar { width: 100%; }
 
   .field-row { grid-template-columns: 1fr; }
+  .tx-detail-grid { grid-template-columns: 1fr; }
+  /* Nút sửa chi tiết xuống dòng riêng, không chen với dòng người nhập. */
+  .large-actions button { margin-left: 0; width: 100%; }
 
   /* Bảng còn lại (thành viên, danh mục) cuộn ngang, thu gọn ô cho đỡ chật. */
   th, td { padding: 8px 8px; }

@@ -22,13 +22,14 @@ import {
   categoryUpdateSchema,
   formatZodError,
   joinSchema,
+  largeQuerySchema,
   loginSchema,
   monthParam,
   registerSchema,
   transactionCreateSchema,
   transactionUpdateSchema,
 } from './validators';
-import { currentMonthInVietnam, isValidDate } from './dates';
+import { currentMonthInVietnam, isValidDate, monthEndExclusive, monthStart } from './dates';
 import { buildDashboardSummary } from './dashboard';
 import { deleteTransactionVector, embedTransactionById, upsertTransactionVectors } from './ai/embed';
 import { semanticSearch } from './ai/search';
@@ -254,9 +255,11 @@ app.post('/household/invite-code/rotate', requireAuth, requireOwner, async (c) =
 /* =============================================================== categories */
 
 app.get('/categories', requireAuth, async (c) => {
-  const includeArchived = c.req.query('includeArchived') === '1';
   return c.json({
-    categories: await db.listCategories(c.env.DB, c.get('householdId'), includeArchived),
+    categories: await db.listCategories(c.env.DB, c.get('householdId'), {
+      includeArchived: c.req.query('includeArchived') === '1',
+      includeDeleted: c.req.query('includeDeleted') === '1',
+    }),
   });
 });
 
@@ -272,10 +275,27 @@ app.post('/categories', requireAuth, async (c) => {
     );
     return c.json(created, 201);
   } catch (err) {
-    if (String(err).includes('UNIQUE')) {
+    if (!String(err).includes('UNIQUE')) throw err;
+    // Chỗ bị chiếm có thể là một danh mục đã xoá — ràng buộc UNIQUE tính cả
+    // hàng đã xoá mềm. Khôi phục nó lại (kèm biểu tượng mới) thay vì bắt người
+    // dùng đi tìm trong danh sách đã xoá; tên trùng với danh mục đang dùng thì
+    // vẫn từ chối như cũ.
+    const existing = await db.findCategoryByName(
+      c.env.DB,
+      c.get('householdId'),
+      parsed.data.kind,
+      parsed.data.name,
+    );
+    if (!existing || existing.deletedAt === null) {
       return c.json({ error: 'Danh mục cùng tên và cùng loại đã tồn tại' }, 409);
     }
-    throw err;
+    await db.restoreCategory(c.env.DB, c.get('householdId'), existing.id);
+    await db.updateCategory(c.env.DB, c.get('householdId'), existing.id, {
+      icon: parsed.data.icon ?? null,
+      isArchived: false,
+    });
+    const restored = await db.getCategory(c.env.DB, c.get('householdId'), existing.id);
+    return c.json({ ...restored!, restored: true }, 200);
   }
 });
 
@@ -287,25 +307,39 @@ app.patch('/categories/:id', requireAuth, async (c) => {
     icon: parsed.data.icon === undefined ? undefined : (parsed.data.icon ?? null),
     isArchived: parsed.data.isArchived,
   };
-  const ok = await db.updateCategory(c.env.DB, c.get('householdId'), c.req.param('id'), patch);
-  if (!ok) return c.json({ error: 'Không tìm thấy danh mục' }, 404);
+  try {
+    const ok = await db.updateCategory(c.env.DB, c.get('householdId'), c.req.param('id'), patch);
+    if (!ok) return c.json({ error: 'Không tìm thấy danh mục' }, 404);
+  } catch (err) {
+    // Đổi tên trùng một danh mục khác cùng loại — ràng buộc UNIQUE của bảng.
+    if (String(err).includes('UNIQUE')) {
+      return c.json({ error: 'Danh mục cùng tên và cùng loại đã tồn tại' }, 409);
+    }
+    throw err;
+  }
   return c.json(await db.getCategory(c.env.DB, c.get('householdId'), c.req.param('id')));
 });
 
+/**
+ * Xoá danh mục cũng chỉ là xoá mềm: hàng ở lại nên giao dịch cũ giữ nguyên
+ * nhãn, còn ô chọn danh mục thì không thấy nó nữa. Trả về số giao dịch đang
+ * mang nhãn này để giao diện nói rõ hậu quả.
+ */
 app.delete('/categories/:id', requireAuth, async (c) => {
   const householdId = c.get('householdId');
   const id = c.req.param('id');
-  if (!(await db.getCategory(c.env.DB, householdId, id))) {
-    return c.json({ error: 'Không tìm thấy danh mục' }, 404);
-  }
-  // Còn giao dịch tham chiếu thì lưu trữ thay vì xoá, để lịch sử không mất nhãn.
   const used = await db.countTransactionsInCategory(c.env.DB, householdId, id);
-  if (used > 0) {
-    await db.updateCategory(c.env.DB, householdId, id, { isArchived: true });
-    return c.json({ archived: true, transactions: used });
-  }
-  await db.deleteCategory(c.env.DB, householdId, id);
-  return c.json({ deleted: true });
+  const ok = await db.softDeleteCategory(c.env.DB, householdId, id, Date.now());
+  if (!ok) return c.json({ error: 'Không tìm thấy danh mục' }, 404);
+  return c.json({ deleted: true, transactions: used });
+});
+
+app.post('/categories/:id/restore', requireAuth, async (c) => {
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+  const ok = await db.restoreCategory(c.env.DB, householdId, id);
+  if (!ok) return c.json({ error: 'Không tìm thấy danh mục đã xoá' }, 404);
+  return c.json(await db.getCategory(c.env.DB, householdId, id));
 });
 
 /* ============================================================= transactions */
@@ -317,6 +351,8 @@ const listQuerySchema = z.object({
   recurrence: z.enum(['monthly', 'one_off']).optional(),
   categoryId: z.string().min(1).optional(),
   q: z.string().trim().min(1).max(200).optional(),
+  /** '1' để danh sách kèm cả giao dịch đã xoá mềm. */
+  includeDeleted: z.literal('1').optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.string().min(1).optional(),
 });
@@ -325,7 +361,51 @@ app.get('/transactions', requireAuth, async (c) => {
   const raw = Object.fromEntries(new URL(c.req.url).searchParams.entries());
   const parsed = listQuerySchema.safeParse(raw);
   if (!parsed.success) return c.json({ error: formatZodError(parsed.error) }, 400);
-  return c.json(await db.listTransactions(c.env.DB, c.get('householdId'), parsed.data));
+  return c.json(
+    await db.listTransactions(c.env.DB, c.get('householdId'), {
+      ...parsed.data,
+      includeDeleted: parsed.data.includeDeleted === '1',
+    }),
+  );
+});
+
+/**
+ * Các khoản thu/chi vượt ngưỡng trong một tháng.
+ * Đặt trước '/transactions/:id' để 'large' không bị hiểu là một id.
+ */
+app.get('/transactions/large', requireAuth, async (c) => {
+  const raw = Object.fromEntries(new URL(c.req.url).searchParams.entries());
+  const parsed = largeQuerySchema.safeParse(raw);
+  if (!parsed.success) return c.json({ error: formatZodError(parsed.error) }, 400);
+
+  const householdId = c.get('householdId');
+  const month = parsed.data.month ?? currentMonthInVietnam();
+  const threshold = parsed.data.min ?? db.DEFAULT_LARGE_THRESHOLD;
+  const range = {
+    fromInclusive: monthStart(month),
+    toExclusive: monthEndExclusive(month),
+    threshold,
+    limit: parsed.data.limit,
+  };
+
+  const [expense, income, household] = await Promise.all([
+    db.listLargeTransactions(c.env.DB, householdId, { ...range, direction: 'expense' }),
+    db.listLargeTransactions(c.env.DB, householdId, { ...range, direction: 'income' }),
+    db.findHouseholdById(c.env.DB, householdId),
+  ]);
+  return c.json({
+    month,
+    threshold,
+    currency: household?.currency ?? 'VND',
+    income,
+    expense,
+  });
+});
+
+app.get('/transactions/:id', requireAuth, async (c) => {
+  const tx = await db.getTransaction(c.env.DB, c.get('householdId'), c.req.param('id'), true);
+  if (!tx) return c.json({ error: 'Không tìm thấy giao dịch' }, 404);
+  return c.json(tx);
 });
 
 /** Danh mục phải thuộc cùng hộ và đúng chiều thu/chi. */
@@ -336,8 +416,9 @@ async function validateCategory(
   direction: 'income' | 'expense' | undefined,
 ): Promise<string | null> {
   if (!categoryId) return null;
-  const category = await db.getCategory(env.DB, householdId, categoryId);
+  const category = await db.getCategory(env.DB, householdId, categoryId, true);
   if (!category) return 'Danh mục không tồn tại';
+  if (category.deletedAt !== null) return 'Danh mục đã bị xoá — khôi phục lại trước khi dùng';
   if (direction && category.kind !== direction) {
     return 'Danh mục không khớp với loại thu/chi của giao dịch';
   }
@@ -348,7 +429,11 @@ app.post('/transactions', requireAuth, async (c) => {
   const parsed = parseBody(transactionCreateSchema, await readJson(c));
   if (!parsed.ok) return c.json({ error: parsed.message }, 400);
   const householdId = c.get('householdId');
-  const input = { ...parsed.data, categoryId: parsed.data.categoryId ?? null };
+  const input = {
+    ...parsed.data,
+    categoryId: parsed.data.categoryId ?? null,
+    paymentMethod: parsed.data.paymentMethod ?? null,
+  };
 
   const categoryError = await validateCategory(c.env, householdId, input.categoryId, input.direction);
   if (categoryError) return c.json({ error: categoryError }, 400);
@@ -394,13 +479,35 @@ app.patch('/transactions/:id', requireAuth, async (c) => {
   return c.json(await db.getTransaction(c.env.DB, householdId, id));
 });
 
+/**
+ * Xoá luôn là xoá mềm: bản ghi ở lại database với `deleted_at`, biến khỏi mọi
+ * số liệu tổng hợp nhưng vẫn hiện trong danh sách ở dạng gạch ngang và khôi
+ * phục lại được. Không có đường nào xoá hẳn một giao dịch.
+ */
 app.delete('/transactions/:id', requireAuth, async (c) => {
   const householdId = c.get('householdId');
   const id = c.req.param('id');
   const ok = await db.softDeleteTransaction(c.env.DB, householdId, id, Date.now());
   if (!ok) return c.json({ error: 'Không tìm thấy giao dịch' }, 404);
+  // Gỡ vector để giao dịch đã xoá không lọt vào tìm kiếm ngữ nghĩa và hỏi đáp.
   background(c, deleteTransactionVector(c.env, id));
   return c.json({ deleted: true });
+});
+
+app.post('/transactions/:id/restore', requireAuth, async (c) => {
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+  const ok = await db.restoreTransaction(
+    c.env.DB,
+    householdId,
+    id,
+    Date.now(),
+    aiEnabled(c.env) ? 'pending' : 'skipped',
+  );
+  if (!ok) return c.json({ error: 'Không tìm thấy giao dịch đã xoá' }, 404);
+  // Vector đã bị gỡ lúc xoá nên phải đẩy lại thì tìm kiếm mới thấy.
+  if (aiEnabled(c.env)) background(c, embedTransactionById(c.env, householdId, id));
+  return c.json(await db.getTransaction(c.env.DB, householdId, id));
 });
 
 /* ================================================================ dashboard */

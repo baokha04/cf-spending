@@ -8,7 +8,9 @@
 import type {
   Category,
   Direction,
+  LargeTransactionGroup,
   MemberRole,
+  PaymentMethod,
   Recurrence,
   Transaction,
   Member,
@@ -19,6 +21,9 @@ export interface TransactionRow {
   id: string;
   occurred_on: string;
   note: string;
+  detail: string;
+  payee: string;
+  payment_method: string;
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
@@ -28,6 +33,7 @@ export interface TransactionRow {
   created_by_name: string;
   created_at: number;
   updated_at: number;
+  deleted_at: number | null;
 }
 
 export function mapTransaction(row: TransactionRow): Transaction {
@@ -35,6 +41,10 @@ export function mapTransaction(row: TransactionRow): Transaction {
     id: row.id,
     occurredOn: row.occurred_on,
     note: row.note,
+    detail: row.detail,
+    payee: row.payee,
+    // Cột lưu chuỗi rỗng cho "chưa ghi"; API nói bằng null cho gọn phía client.
+    paymentMethod: (row.payment_method || null) as PaymentMethod | null,
     amount: row.amount,
     direction: row.direction,
     recurrence: row.recurrence,
@@ -44,14 +54,16 @@ export function mapTransaction(row: TransactionRow): Transaction {
     createdByName: row.created_by_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
   };
 }
 
 const TX_SELECT = `
-  SELECT t.id, t.occurred_on, t.note, t.amount, t.direction, t.recurrence,
+  SELECT t.id, t.occurred_on, t.note, t.detail, t.payee, t.payment_method,
+         t.amount, t.direction, t.recurrence,
          t.category_id, c.name AS category_name,
          t.created_by, u.display_name AS created_by_name,
-         t.created_at, t.updated_at
+         t.created_at, t.updated_at, t.deleted_at
   FROM transactions t
   LEFT JOIN categories c ON c.id = t.category_id
   JOIN users u ON u.id = t.created_by
@@ -174,7 +186,10 @@ interface CategoryRow {
   kind: Direction;
   icon: string | null;
   is_archived: number;
+  deleted_at: number | null;
 }
+
+const CATEGORY_COLUMNS = 'id, name, kind, icon, is_archived, deleted_at';
 
 function mapCategory(row: CategoryRow): Category {
   return {
@@ -183,18 +198,24 @@ function mapCategory(row: CategoryRow): Category {
     kind: row.kind,
     icon: row.icon,
     isArchived: row.is_archived === 1,
+    deletedAt: row.deleted_at,
   };
 }
 
 export async function listCategories(
   db: D1Database,
   householdId: string,
-  includeArchived = false,
+  options: { includeArchived?: boolean; includeDeleted?: boolean } = {},
 ): Promise<Category[]> {
-  const sql = includeArchived
-    ? 'SELECT id, name, kind, icon, is_archived FROM categories WHERE household_id = ? ORDER BY kind DESC, name'
-    : 'SELECT id, name, kind, icon, is_archived FROM categories WHERE household_id = ? AND is_archived = 0 ORDER BY kind DESC, name';
-  const { results } = await db.prepare(sql).bind(householdId).all<CategoryRow>();
+  const where = ['household_id = ?'];
+  if (!options.includeArchived) where.push('is_archived = 0');
+  if (!options.includeDeleted) where.push('deleted_at IS NULL');
+  const { results } = await db
+    .prepare(
+      `SELECT ${CATEGORY_COLUMNS} FROM categories WHERE ${where.join(' AND ')} ORDER BY kind DESC, name`,
+    )
+    .bind(householdId)
+    .all<CategoryRow>();
   return results.map(mapCategory);
 }
 
@@ -202,10 +223,35 @@ export async function getCategory(
   db: D1Database,
   householdId: string,
   id: string,
+  includeDeleted = false,
 ): Promise<Category | null> {
   const row = await db
-    .prepare('SELECT id, name, kind, icon, is_archived FROM categories WHERE household_id = ? AND id = ?')
+    .prepare(
+      `SELECT ${CATEGORY_COLUMNS} FROM categories WHERE household_id = ? AND id = ?${
+        includeDeleted ? '' : ' AND deleted_at IS NULL'
+      }`,
+    )
     .bind(householdId, id)
+    .first<CategoryRow>();
+  return row ? mapCategory(row) : null;
+}
+
+/**
+ * Tra theo cặp (loại, tên) — đúng khoá UNIQUE của bảng. Dùng khi tạo mới đụng
+ * ràng buộc: nếu hàng chắn chỗ là một danh mục đã xoá thì khôi phục nó thay vì
+ * bắt người dùng đi tìm trong đống đã xoá.
+ */
+export async function findCategoryByName(
+  db: D1Database,
+  householdId: string,
+  kind: Direction,
+  name: string,
+): Promise<Category | null> {
+  const row = await db
+    .prepare(
+      `SELECT ${CATEGORY_COLUMNS} FROM categories WHERE household_id = ? AND kind = ? AND name = ?`,
+    )
+    .bind(householdId, kind, name)
     .first<CategoryRow>();
   return row ? mapCategory(row) : null;
 }
@@ -223,7 +269,14 @@ export async function insertCategory(
     )
     .bind(id, householdId, input.name, input.kind, input.icon, now)
     .run();
-  return { id, name: input.name, kind: input.kind, icon: input.icon, isArchived: false };
+  return {
+    id,
+    name: input.name,
+    kind: input.kind,
+    icon: input.icon,
+    isArchived: false,
+    deletedAt: null,
+  };
 }
 
 export async function updateCategory(
@@ -249,7 +302,10 @@ export async function updateCategory(
   if (sets.length === 0) return true;
   binds.push(householdId, id);
   const res = await db
-    .prepare(`UPDATE categories SET ${sets.join(', ')} WHERE household_id = ? AND id = ?`)
+    .prepare(
+      `UPDATE categories SET ${sets.join(', ')}
+       WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
+    )
     .bind(...binds)
     .run();
   return (res.meta.changes ?? 0) > 0;
@@ -267,13 +323,34 @@ export async function countTransactionsInCategory(
   return row?.n ?? 0;
 }
 
-export async function deleteCategory(
+/**
+ * Xoá mềm: hàng ở lại nên giao dịch cũ vẫn đọc được tên danh mục, còn ô chọn
+ * danh mục thì không thấy nó nữa. Không có hàm nào xoá hẳn một danh mục.
+ */
+export async function softDeleteCategory(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  now: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      'UPDATE categories SET deleted_at = ? WHERE household_id = ? AND id = ? AND deleted_at IS NULL',
+    )
+    .bind(now, householdId, id)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+export async function restoreCategory(
   db: D1Database,
   householdId: string,
   id: string,
 ): Promise<boolean> {
   const res = await db
-    .prepare('DELETE FROM categories WHERE household_id = ? AND id = ?')
+    .prepare(
+      'UPDATE categories SET deleted_at = NULL WHERE household_id = ? AND id = ? AND deleted_at IS NOT NULL',
+    )
     .bind(householdId, id)
     .run();
   return (res.meta.changes ?? 0) > 0;
@@ -288,6 +365,8 @@ export interface TransactionFilter {
   recurrence?: Recurrence;
   categoryId?: string;
   q?: string;
+  /** Kèm cả giao dịch đã xoá mềm — danh sách hiển thị chúng ở dạng gạch ngang. */
+  includeDeleted?: boolean;
   limit: number;
   /** Keyset cursor dạng '<occurred_on>|<id>'. */
   cursor?: string;
@@ -298,7 +377,8 @@ export async function listTransactions(
   householdId: string,
   filter: TransactionFilter,
 ): Promise<{ items: Transaction[]; nextCursor: string | null }> {
-  const where = ['t.household_id = ?', 't.deleted_at IS NULL'];
+  const where = ['t.household_id = ?'];
+  if (!filter.includeDeleted) where.push('t.deleted_at IS NULL');
   const binds: unknown[] = [householdId];
 
   if (filter.from) {
@@ -322,8 +402,10 @@ export async function listTransactions(
     binds.push(filter.categoryId);
   }
   if (filter.q) {
-    where.push('t.note LIKE ?');
-    binds.push(`%${filter.q}%`);
+    // Tìm cả trong phần chi tiết và bên nhận, không chỉ dòng nội dung ngắn.
+    where.push('(t.note LIKE ? OR t.detail LIKE ? OR t.payee LIKE ?)');
+    const like = `%${filter.q}%`;
+    binds.push(like, like, like);
   }
   if (filter.cursor) {
     const sep = filter.cursor.lastIndexOf('|');
@@ -357,9 +439,14 @@ export async function getTransaction(
   db: D1Database,
   householdId: string,
   id: string,
+  includeDeleted = false,
 ): Promise<Transaction | null> {
   const row = await db
-    .prepare(`${TX_SELECT} WHERE t.household_id = ? AND t.id = ? AND t.deleted_at IS NULL`)
+    .prepare(
+      `${TX_SELECT} WHERE t.household_id = ? AND t.id = ?${
+        includeDeleted ? '' : ' AND t.deleted_at IS NULL'
+      }`,
+    )
     .bind(householdId, id)
     .first<TransactionRow>();
   return row ? mapTransaction(row) : null;
@@ -385,6 +472,9 @@ export async function getTransactionsByIds(
 export interface TransactionInput {
   occurredOn: string;
   note: string;
+  detail: string;
+  payee: string;
+  paymentMethod: PaymentMethod | null;
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
@@ -403,9 +493,9 @@ export async function insertTransaction(
   await db
     .prepare(
       `INSERT INTO transactions
-         (id, household_id, created_by, occurred_on, note, amount, direction, recurrence,
-          category_id, embed_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, household_id, created_by, occurred_on, note, detail, payee, payment_method,
+          amount, direction, recurrence, category_id, embed_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       id,
@@ -413,6 +503,9 @@ export async function insertTransaction(
       userId,
       input.occurredOn,
       input.note,
+      input.detail,
+      input.payee,
+      input.paymentMethod ?? '',
       input.amount,
       input.direction,
       input.recurrence,
@@ -438,6 +531,9 @@ export async function updateTransaction(
   const columns: Record<keyof TransactionInput, string> = {
     occurredOn: 'occurred_on',
     note: 'note',
+    detail: 'detail',
+    payee: 'payee',
+    paymentMethod: 'payment_method',
     amount: 'amount',
     direction: 'direction',
     recurrence: 'recurrence',
@@ -447,7 +543,8 @@ export async function updateTransaction(
     const value = patch[key];
     if (value !== undefined) {
       sets.push(`${column} = ?`);
-      binds.push(value);
+      // paymentMethod = null nghĩa là gỡ bỏ; cột lưu chuỗi rỗng.
+      binds.push(key === 'paymentMethod' ? (value ?? '') : value);
     }
   }
   if (sets.length === 0) return true;
@@ -458,6 +555,24 @@ export async function updateTransaction(
       `UPDATE transactions SET ${sets.join(', ')} WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
     )
     .bind(...binds)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/** Bỏ đánh dấu xoá. Trả về false khi giao dịch không tồn tại hoặc chưa từng bị xoá. */
+export async function restoreTransaction(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  now: number,
+  embedStatus: 'pending' | 'skipped',
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE transactions SET deleted_at = NULL, updated_at = ?, embed_status = ?
+       WHERE household_id = ? AND id = ? AND deleted_at IS NOT NULL`,
+    )
+    .bind(now, embedStatus, householdId, id)
     .run();
   return (res.meta.changes ?? 0) > 0;
 }
@@ -475,6 +590,70 @@ export async function softDeleteTransaction(
     .bind(now, now, householdId, id)
     .run();
   return (res.meta.changes ?? 0) > 0;
+}
+
+/* -------------------------------------------------------- khoản thu/chi lớn */
+
+/** Ngưỡng mặc định coi là "khoản lớn": 1 triệu đồng. */
+export const DEFAULT_LARGE_THRESHOLD = 1_000_000;
+
+/**
+ * Các khoản vượt ngưỡng của một chiều trong khoảng ngày, kèm tổng của cả chiều
+ * đó trong cùng khoảng để tính tỷ trọng. Sắp theo số tiền giảm dần vì người
+ * dùng vào đây để soi khoản to nhất trước.
+ */
+export async function listLargeTransactions(
+  db: D1Database,
+  householdId: string,
+  params: {
+    fromInclusive: string;
+    toExclusive: string;
+    direction: Direction;
+    threshold: number;
+    limit: number;
+  },
+): Promise<LargeTransactionGroup> {
+  const { fromInclusive, toExclusive, direction, threshold, limit } = params;
+  const [{ results }, totals] = await Promise.all([
+    db
+      .prepare(
+        `${TX_SELECT} WHERE t.household_id = ? AND t.deleted_at IS NULL
+           AND t.direction = ? AND t.amount >= ?
+           AND t.occurred_on >= ? AND t.occurred_on < ?
+         ORDER BY t.amount DESC, t.occurred_on DESC, t.id DESC LIMIT ?`,
+      )
+      .bind(householdId, direction, threshold, fromInclusive, toExclusive, limit)
+      .all<TransactionRow>(),
+    // Đếm trên toàn bộ khoản vượt ngưỡng chứ không chỉ trang đang trả về, để
+    // "5 khoản lớn chiếm 62% tổng chi" không sai khi có nhiều hơn `limit` khoản.
+    db
+      .prepare(
+        `SELECT sum(amount) AS month_total, count(*) AS month_n,
+                sum(CASE WHEN amount >= ?1 THEN amount ELSE 0 END) AS large_total,
+                sum(CASE WHEN amount >= ?1 THEN 1 ELSE 0 END) AS large_n,
+                sum(CASE WHEN amount >= ?1 AND trim(detail) = '' THEN 1 ELSE 0 END) AS missing
+         FROM transactions
+         WHERE household_id = ?2 AND deleted_at IS NULL AND direction = ?3
+           AND occurred_on >= ?4 AND occurred_on < ?5`,
+      )
+      .bind(threshold, householdId, direction, fromInclusive, toExclusive)
+      .first<{
+        month_total: number | null;
+        month_n: number;
+        large_total: number | null;
+        large_n: number | null;
+        missing: number | null;
+      }>(),
+  ]);
+
+  return {
+    items: results.map(mapTransaction),
+    total: totals?.large_total ?? 0,
+    monthTotal: totals?.month_total ?? 0,
+    count: totals?.large_n ?? 0,
+    monthCount: totals?.month_n ?? 0,
+    missingDetail: totals?.missing ?? 0,
+  };
 }
 
 /* -------------------------------------------------------------- dashboard */
@@ -562,6 +741,8 @@ export interface PendingEmbedRow {
   household_id: string;
   occurred_on: string;
   note: string;
+  detail: string;
+  payee: string;
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
@@ -575,8 +756,8 @@ export async function listPendingEmbeds(
 ): Promise<PendingEmbedRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT t.id, t.household_id, t.occurred_on, t.note, t.amount, t.direction, t.recurrence,
-              c.name AS category_name
+      `SELECT t.id, t.household_id, t.occurred_on, t.note, t.detail, t.payee,
+              t.amount, t.direction, t.recurrence, c.name AS category_name
        FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
        WHERE t.household_id = ? AND t.deleted_at IS NULL
          AND t.embed_status IN ('pending', 'error', 'skipped')

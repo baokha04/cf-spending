@@ -4,8 +4,21 @@
 
 Mỗi giao dịch lưu **thời gian, nội dung, số tiền, chiều thu/chi**, và được phân loại
 theo tính chất **hàng tháng** (cố định: tiền nhà, điện, học phí) hay **phát sinh**.
-Dashboard so sánh trực tiếp tháng hiện tại với tháng trước. Nhiều tài khoản có thể
-vào chung một hộ gia đình qua mã mời để thấy chung số liệu.
+Riêng những khoản đáng nhớ còn ghi thêm được **chi tiết, bên nhận/nguồn tiền và hình
+thức thanh toán**. Dashboard so sánh trực tiếp tháng hiện tại với tháng trước, còn
+trang **Khoản lớn** gom các khoản thu/chi vượt ngưỡng để soi kỹ từng khoản. Nhiều tài
+khoản có thể vào chung một hộ gia đình qua mã mời để thấy chung số liệu.
+
+## Các trang
+
+| Trang | Làm gì |
+|---|---|
+| Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước |
+| Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
+| Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
+| Danh mục | Thêm, **sửa tên và biểu tượng**, lưu trữ hoặc xoá. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
+| Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
+| Hộ gia đình | Thành viên và mã mời |
 
 ## Công nghệ
 
@@ -95,6 +108,10 @@ Một lần duy nhất, chuẩn bị project Pages:
 1. `npm run cf:setup` tạo project Pages `cf-spending` (nhánh production `dev`).
 2. `npm run db:migrate` áp schema cho D1 trên Cloudflare (`cf:setup` chỉ chạy bản local).
 
+Mỗi lần repo có thêm file trong `migrations/` thì chạy lại `npm run db:migrate`
+(và `npm run db:migrate:local` cho bản cục bộ) trước khi deploy — deploy không tự áp
+migration.
+
 `wrangler pages deploy` đẩy luôn binding lấy từ `wrangler.jsonc` vào cấu hình
 Production của project, nên **không phải gắn tay `DB`/`VECTORIZE`/`AI` trong dashboard**
 — sau lần deploy đầu, Settings của project đã có sẵn cả ba binding lẫn biến
@@ -161,9 +178,11 @@ npm test        # Vitest chạy trên Workers runtime với D1 thật cục bộ
 npm run build   # typecheck + build production
 ```
 
-Bộ test phủ ba nhóm: xác thực và **cô lập dữ liệu giữa các hộ**, CRUD cùng kiểm tra
-dữ liệu đầu vào, và độ chính xác của tổng hợp dashboard (gồm các mốc biên tháng,
-năm nhuận, và trường hợp tháng trước rỗng).
+Bộ test phủ sáu nhóm: xác thực và **cô lập dữ liệu giữa các hộ**, CRUD cùng kiểm tra
+dữ liệu đầu vào, độ chính xác của tổng hợp dashboard (gồm các mốc biên tháng, năm
+nhuận, và trường hợp tháng trước rỗng), chỉnh sửa danh mục (kể cả đổi tên trùng),
+phần chi tiết giao dịch cùng báo cáo khoản lớn, và xoá mềm — khôi phục cùng việc
+giao dịch đã xoá không lọt vào bất kỳ số liệu tổng hợp nào.
 
 ## Cấu trúc
 
@@ -185,6 +204,40 @@ src/shared/types.ts         Kiểu dùng chung hai phía
 ```
 
 ## Vài quyết định đáng lưu ý
+
+**Xoá luôn là xoá mềm — cả giao dịch lẫn danh mục.** Không có đường nào xoá hẳn một
+bản ghi: `DELETE` đặt `deleted_at` rồi thôi, và cả hai đều có `POST .../restore` để
+lấy lại. Ghi nhầm rồi xoá nhầm là chuyện thường ở sổ chi tiêu chung của cả nhà, nên
+nút xoá không được phép là thao tác một chiều.
+
+- *Giao dịch* biến khỏi mọi số liệu (dashboard, khoản lớn, tìm kiếm — vector cũng bị
+  gỡ khỏi Vectorize) nhưng vẫn nằm trong danh sách ở dạng gạch ngang; khôi phục sẽ
+  đẩy vector lại. Bỏ tick "Hiện giao dịch đã xoá" nếu muốn danh sách gọn lại.
+- *Danh mục* biến khỏi mọi ô chọn và không sửa được nữa, nhưng hàng vẫn ở lại bảng
+  nên **giao dịch cũ giữ nguyên nhãn** và dashboard vẫn gọi đúng tên nó. Trang Danh
+  mục hiện đủ ba trạng thái: đang dùng, đã lưu trữ (thôi dùng nhưng vẫn là nhãn hợp
+  lệ) và đã xoá.
+- Ràng buộc UNIQUE `(hộ, loại, tên)` tính cả hàng đã xoá, nên tạo lại đúng tên vừa
+  xoá sẽ **khôi phục chính danh mục cũ** (kèm biểu tượng mới) thay vì báo lỗi trùng
+  tên về một hàng người dùng không nhìn thấy. Trùng tên với danh mục đang dùng thì
+  vẫn trả 409 như cũ.
+
+**Sao chép giao dịch.** Nút *Sao chép* điền sẵn form bằng đúng nội dung, số tiền,
+danh mục và cả phần chi tiết của một giao dịch cũ, chỉ đổi ngày thành hôm nay, rồi
+lưu thành bản ghi **mới**. Tiền chợ, đổ xăng, tiền học thêm lặp lại gần như nguyên
+văn hàng tuần — gõ lại từ đầu mỗi lần là chỗ dễ bỏ sót nhất.
+
+**Khoản lớn tách riêng khỏi danh sách giao dịch.** Một khoản 12 triệu và một khoản
+30 nghìn cần mức ghi chép khác hẳn nhau. Form nhập tự mở phần chi tiết khi số tiền từ
+1 triệu trở lên, còn trang Khoản lớn lọc theo ngưỡng do người dùng chọn, xếp theo số
+tiền giảm dần, kèm tỷ trọng trên tổng tháng và đánh dấu khoản chưa ghi chi tiết. Ba
+cột mới (`detail`, `payee`, `payment_method`) đều `NOT NULL DEFAULT ''` nên dữ liệu cũ
+không phải backfill; phần chi tiết cũng vào luôn văn bản embedding và bộ lọc từ khoá.
+
+**Sửa danh mục không đụng vào giao dịch.** Đổi tên hay biểu tượng chỉ ghi lại hàng
+`categories`, mọi giao dịch vẫn trỏ theo `category_id` nên lịch sử giữ nguyên. Loại
+thu/chi thì không cho đổi — đổi rồi thì các giao dịch cũ sẽ lệch chiều. Đổi sang tên
+đã có trong cùng loại trả về 409 thay vì lỗi 500 từ ràng buộc UNIQUE.
 
 **Số tiền là số nguyên đồng.** VND không có đơn vị lẻ; dùng `INTEGER` nên cộng dồn
 không bao giờ sai số như kiểu dấu phẩy động.

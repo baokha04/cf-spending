@@ -2,11 +2,20 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Category, Direction } from '../../shared/types';
 import { api } from '../lib/api';
 
+/** Trạng thái ô sửa tại chỗ của một danh mục. */
+interface EditState {
+  id: string;
+  name: string;
+  icon: string;
+}
+
 export function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('');
   const [kind, setKind] = useState<Direction>('expense');
+  const [edit, setEdit] = useState<EditState | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -14,7 +23,11 @@ export function Categories() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setCategories((await api.categories(true)).categories);
+      // Trang này là nơi duy nhất nhìn thấy đủ ba trạng thái: đang dùng, đã lưu
+      // trữ và đã xoá.
+      setCategories(
+        (await api.categories({ includeArchived: true, includeDeleted: true })).categories,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được danh mục');
     } finally {
@@ -31,7 +44,10 @@ export function Categories() {
     setError(null);
     setNotice(null);
     try {
-      await api.createCategory({ name, kind, icon: icon || null });
+      const created = await api.createCategory({ name, kind, icon: icon || null });
+      if (created.restored) {
+        setNotice(`"${created.name}" trước đó đã bị xoá nên được khôi phục lại thay vì tạo mới.`);
+      }
       setName('');
       setIcon('');
       await load();
@@ -40,21 +56,50 @@ export function Categories() {
     }
   }
 
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!edit) return;
+    setError(null);
+    setNotice(null);
+    setSaving(true);
+    try {
+      // Loại thu/chi không đổi được: đổi rồi thì các giao dịch cũ sẽ lệch chiều.
+      await api.updateCategory(edit.id, { name: edit.name, icon: edit.icon || null });
+      setEdit(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không sửa được danh mục');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function remove(category: Category) {
-    if (!confirm(`Xoá danh mục "${category.name}"?`)) return;
+    // Xoá mềm: hàng vẫn nằm trong bảng nên lời nhắc không cần doạ dẫm.
+    if (!confirm(`Xoá danh mục "${category.name}"? Vẫn khôi phục lại được.`)) return;
     setError(null);
     setNotice(null);
     try {
       const res = await api.deleteCategory(category.id);
-      // Danh mục còn giao dịch sẽ được lưu trữ thay vì xoá, để lịch sử giữ nguyên nhãn.
-      if (res.archived) {
-        setNotice(
-          `"${category.name}" còn ${res.transactions} giao dịch nên đã chuyển sang lưu trữ thay vì xoá hẳn.`,
-        );
-      }
+      setNotice(
+        res.transactions > 0
+          ? `Đã xoá "${category.name}". ${res.transactions} giao dịch cũ vẫn giữ nguyên nhãn này.`
+          : `Đã xoá "${category.name}".`,
+      );
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không xoá được danh mục');
+    }
+  }
+
+  async function restore(category: Category) {
+    setError(null);
+    setNotice(null);
+    try {
+      await api.restoreCategory(category.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không khôi phục được danh mục');
     }
   }
 
@@ -115,7 +160,11 @@ export function Categories() {
           return (
             <section className="card" key={group.kind}>
               <h2 className="card-title">{group.title}</h2>
-              <p className="card-sub">{rows.length} danh mục</p>
+              <p className="card-sub">
+                {rows.filter((c) => c.deletedAt === null).length} danh mục
+                {rows.some((c) => c.deletedAt !== null) &&
+                  ` · ${rows.filter((c) => c.deletedAt !== null).length} đã xoá`}
+              </p>
               {rows.length === 0 ? (
                 <p className="empty">Chưa có danh mục nào.</p>
               ) : (
@@ -129,25 +178,85 @@ export function Categories() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((c) => (
-                        <tr key={c.id}>
-                          <td>
-                            {c.icon ? `${c.icon} ` : ''}
-                            {c.name}
-                          </td>
-                          <td>
-                            <span className="pill">{c.isArchived ? 'Đã lưu trữ' : 'Đang dùng'}</span>
-                          </td>
-                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <button type="button" className="ghost" onClick={() => void toggleArchive(c)}>
-                              {c.isArchived ? 'Dùng lại' : 'Lưu trữ'}
-                            </button>
-                            <button type="button" className="ghost danger" onClick={() => void remove(c)}>
-                              Xoá
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {rows.map((c) =>
+                        edit?.id === c.id ? (
+                          <tr key={c.id}>
+                            {/* Sửa ngay tại dòng: đổi tên và biểu tượng, giữ nguyên
+                                mọi giao dịch đang gắn với danh mục này. */}
+                            <td colSpan={3}>
+                              <form onSubmit={saveEdit} className="toolbar" style={{ marginBottom: 0 }}>
+                                <div className="field" style={{ width: 90 }}>
+                                  <label htmlFor="c-edit-icon">Biểu tượng</label>
+                                  <input
+                                    id="c-edit-icon"
+                                    maxLength={4}
+                                    placeholder="🍜"
+                                    value={edit.icon}
+                                    onChange={(e) => setEdit({ ...edit, icon: e.target.value })}
+                                  />
+                                </div>
+                                <div className="field" style={{ flex: '1 1 200px' }}>
+                                  <label htmlFor="c-edit-name">Tên</label>
+                                  <input
+                                    id="c-edit-name"
+                                    required
+                                    autoFocus
+                                    maxLength={60}
+                                    value={edit.name}
+                                    onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+                                  />
+                                </div>
+                                <button type="submit" className="primary" disabled={saving}>
+                                  {saving ? 'Đang lưu…' : 'Lưu'}
+                                </button>
+                                <button type="button" onClick={() => setEdit(null)} disabled={saving}>
+                                  Huỷ
+                                </button>
+                              </form>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr key={c.id} className={c.deletedAt !== null ? 'deleted' : undefined}>
+                            <td>
+                              {c.icon ? `${c.icon} ` : ''}
+                              {c.name}
+                            </td>
+                            <td>
+                              <span className={`pill${c.deletedAt !== null ? ' warn' : ''}`}>
+                                {c.deletedAt !== null
+                                  ? 'Đã xoá'
+                                  : c.isArchived
+                                    ? 'Đã lưu trữ'
+                                    : 'Đang dùng'}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              {/* Danh mục đã xoá chỉ còn một đường ra: khôi phục. */}
+                              {c.deletedAt !== null ? (
+                                <button type="button" className="ghost" onClick={() => void restore(c)}>
+                                  Khôi phục
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    onClick={() => setEdit({ id: c.id, name: c.name, icon: c.icon ?? '' })}
+                                  >
+                                    Sửa
+                                  </button>
+                                  <button type="button" className="ghost" onClick={() => void toggleArchive(c)}>
+                                    {c.isArchived ? 'Dùng lại' : 'Lưu trữ'}
+                                  </button>
+                                  <button type="button" className="ghost danger" onClick={() => void remove(c)}>
+                                    Xoá
+                                  </button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        ),
+                      )}
                     </tbody>
                   </table>
                 </div>
