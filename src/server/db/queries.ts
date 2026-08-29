@@ -8,7 +8,9 @@
 import type {
   Category,
   Direction,
+  LargeTransactionGroup,
   MemberRole,
+  PaymentMethod,
   Recurrence,
   Transaction,
   Member,
@@ -19,6 +21,9 @@ export interface TransactionRow {
   id: string;
   occurred_on: string;
   note: string;
+  detail: string;
+  payee: string;
+  payment_method: string;
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
@@ -35,6 +40,10 @@ export function mapTransaction(row: TransactionRow): Transaction {
     id: row.id,
     occurredOn: row.occurred_on,
     note: row.note,
+    detail: row.detail,
+    payee: row.payee,
+    // Cột lưu chuỗi rỗng cho "chưa ghi"; API nói bằng null cho gọn phía client.
+    paymentMethod: (row.payment_method || null) as PaymentMethod | null,
     amount: row.amount,
     direction: row.direction,
     recurrence: row.recurrence,
@@ -48,7 +57,8 @@ export function mapTransaction(row: TransactionRow): Transaction {
 }
 
 const TX_SELECT = `
-  SELECT t.id, t.occurred_on, t.note, t.amount, t.direction, t.recurrence,
+  SELECT t.id, t.occurred_on, t.note, t.detail, t.payee, t.payment_method,
+         t.amount, t.direction, t.recurrence,
          t.category_id, c.name AS category_name,
          t.created_by, u.display_name AS created_by_name,
          t.created_at, t.updated_at
@@ -322,8 +332,10 @@ export async function listTransactions(
     binds.push(filter.categoryId);
   }
   if (filter.q) {
-    where.push('t.note LIKE ?');
-    binds.push(`%${filter.q}%`);
+    // Tìm cả trong phần chi tiết và bên nhận, không chỉ dòng nội dung ngắn.
+    where.push('(t.note LIKE ? OR t.detail LIKE ? OR t.payee LIKE ?)');
+    const like = `%${filter.q}%`;
+    binds.push(like, like, like);
   }
   if (filter.cursor) {
     const sep = filter.cursor.lastIndexOf('|');
@@ -385,6 +397,9 @@ export async function getTransactionsByIds(
 export interface TransactionInput {
   occurredOn: string;
   note: string;
+  detail: string;
+  payee: string;
+  paymentMethod: PaymentMethod | null;
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
@@ -403,9 +418,9 @@ export async function insertTransaction(
   await db
     .prepare(
       `INSERT INTO transactions
-         (id, household_id, created_by, occurred_on, note, amount, direction, recurrence,
-          category_id, embed_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, household_id, created_by, occurred_on, note, detail, payee, payment_method,
+          amount, direction, recurrence, category_id, embed_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       id,
@@ -413,6 +428,9 @@ export async function insertTransaction(
       userId,
       input.occurredOn,
       input.note,
+      input.detail,
+      input.payee,
+      input.paymentMethod ?? '',
       input.amount,
       input.direction,
       input.recurrence,
@@ -438,6 +456,9 @@ export async function updateTransaction(
   const columns: Record<keyof TransactionInput, string> = {
     occurredOn: 'occurred_on',
     note: 'note',
+    detail: 'detail',
+    payee: 'payee',
+    paymentMethod: 'payment_method',
     amount: 'amount',
     direction: 'direction',
     recurrence: 'recurrence',
@@ -447,7 +468,8 @@ export async function updateTransaction(
     const value = patch[key];
     if (value !== undefined) {
       sets.push(`${column} = ?`);
-      binds.push(value);
+      // paymentMethod = null nghĩa là gỡ bỏ; cột lưu chuỗi rỗng.
+      binds.push(key === 'paymentMethod' ? (value ?? '') : value);
     }
   }
   if (sets.length === 0) return true;
@@ -475,6 +497,70 @@ export async function softDeleteTransaction(
     .bind(now, now, householdId, id)
     .run();
   return (res.meta.changes ?? 0) > 0;
+}
+
+/* -------------------------------------------------------- khoản thu/chi lớn */
+
+/** Ngưỡng mặc định coi là "khoản lớn": 1 triệu đồng. */
+export const DEFAULT_LARGE_THRESHOLD = 1_000_000;
+
+/**
+ * Các khoản vượt ngưỡng của một chiều trong khoảng ngày, kèm tổng của cả chiều
+ * đó trong cùng khoảng để tính tỷ trọng. Sắp theo số tiền giảm dần vì người
+ * dùng vào đây để soi khoản to nhất trước.
+ */
+export async function listLargeTransactions(
+  db: D1Database,
+  householdId: string,
+  params: {
+    fromInclusive: string;
+    toExclusive: string;
+    direction: Direction;
+    threshold: number;
+    limit: number;
+  },
+): Promise<LargeTransactionGroup> {
+  const { fromInclusive, toExclusive, direction, threshold, limit } = params;
+  const [{ results }, totals] = await Promise.all([
+    db
+      .prepare(
+        `${TX_SELECT} WHERE t.household_id = ? AND t.deleted_at IS NULL
+           AND t.direction = ? AND t.amount >= ?
+           AND t.occurred_on >= ? AND t.occurred_on < ?
+         ORDER BY t.amount DESC, t.occurred_on DESC, t.id DESC LIMIT ?`,
+      )
+      .bind(householdId, direction, threshold, fromInclusive, toExclusive, limit)
+      .all<TransactionRow>(),
+    // Đếm trên toàn bộ khoản vượt ngưỡng chứ không chỉ trang đang trả về, để
+    // "5 khoản lớn chiếm 62% tổng chi" không sai khi có nhiều hơn `limit` khoản.
+    db
+      .prepare(
+        `SELECT sum(amount) AS month_total, count(*) AS month_n,
+                sum(CASE WHEN amount >= ?1 THEN amount ELSE 0 END) AS large_total,
+                sum(CASE WHEN amount >= ?1 THEN 1 ELSE 0 END) AS large_n,
+                sum(CASE WHEN amount >= ?1 AND trim(detail) = '' THEN 1 ELSE 0 END) AS missing
+         FROM transactions
+         WHERE household_id = ?2 AND deleted_at IS NULL AND direction = ?3
+           AND occurred_on >= ?4 AND occurred_on < ?5`,
+      )
+      .bind(threshold, householdId, direction, fromInclusive, toExclusive)
+      .first<{
+        month_total: number | null;
+        month_n: number;
+        large_total: number | null;
+        large_n: number | null;
+        missing: number | null;
+      }>(),
+  ]);
+
+  return {
+    items: results.map(mapTransaction),
+    total: totals?.large_total ?? 0,
+    monthTotal: totals?.month_total ?? 0,
+    count: totals?.large_n ?? 0,
+    monthCount: totals?.month_n ?? 0,
+    missingDetail: totals?.missing ?? 0,
+  };
 }
 
 /* -------------------------------------------------------------- dashboard */
@@ -562,6 +648,8 @@ export interface PendingEmbedRow {
   household_id: string;
   occurred_on: string;
   note: string;
+  detail: string;
+  payee: string;
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
@@ -575,8 +663,8 @@ export async function listPendingEmbeds(
 ): Promise<PendingEmbedRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT t.id, t.household_id, t.occurred_on, t.note, t.amount, t.direction, t.recurrence,
-              c.name AS category_name
+      `SELECT t.id, t.household_id, t.occurred_on, t.note, t.detail, t.payee,
+              t.amount, t.direction, t.recurrence, c.name AS category_name
        FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
        WHERE t.household_id = ? AND t.deleted_at IS NULL
          AND t.embed_status IN ('pending', 'error', 'skipped')

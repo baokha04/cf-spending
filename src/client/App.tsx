@@ -2,6 +2,7 @@ import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth-context';
 import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
+import { LargeTransactions } from './pages/LargeTransactions';
 import { Categories } from './pages/Categories';
 import { Household } from './pages/Household';
 import { Ask } from './pages/Ask';
@@ -50,6 +51,13 @@ function TabIcon({ name }: { name: string }) {
           <circle cx="7.8" cy="8.2" r="1.2" />
         </svg>
       );
+    case 'large':
+      // Đường gấp có một đỉnh nhô cao — hình ảnh của khoản bất thường trong tháng.
+      return (
+        <svg {...common}>
+          <path d="M3 16h3l3.5-9 4 12 3-7h4.5" />
+        </svg>
+      );
     case 'ask':
       return (
         <svg {...common}>
@@ -74,6 +82,7 @@ const NAV = [
   // shortLabel: nhãn cho thanh tab hẹp trên điện thoại (mỗi tab ~78pt).
   { to: '/', label: 'Tổng quan', shortLabel: 'Tổng quan', icon: 'overview', end: true },
   { to: '/giao-dich', label: 'Giao dịch', shortLabel: 'Giao dịch', icon: 'transactions' },
+  { to: '/khoan-lon', label: 'Khoản lớn', shortLabel: 'Khoản lớn', icon: 'large' },
   { to: '/danh-muc', label: 'Danh mục', shortLabel: 'Danh mục', icon: 'categories' },
   { to: '/hoi-dap', label: 'Hỏi đáp', shortLabel: 'Hỏi đáp', icon: 'ask' },
   { to: '/ho-gia-dinh', label: 'Hộ gia đình', shortLabel: 'Gia đình', icon: 'household' },
@@ -148,6 +157,7 @@ export function App() {
         <Route path="/dang-ky" element={<GuestOnly><Register /></GuestOnly>} />
         <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
         <Route path="/giao-dich" element={<RequireAuth><Transactions /></RequireAuth>} />
+        <Route path="/khoan-lon" element={<RequireAuth><LargeTransactions /></RequireAuth>} />
         <Route path="/danh-muc" element={<RequireAuth><Categories /></RequireAuth>} />
         <Route path="/hoi-dap" element={<RequireAuth><Ask /></RequireAuth>} />
         <Route path="/ho-gia-dinh" element={<RequireAuth><Household /></RequireAuth>} />

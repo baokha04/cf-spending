@@ -22,13 +22,14 @@ import {
   categoryUpdateSchema,
   formatZodError,
   joinSchema,
+  largeQuerySchema,
   loginSchema,
   monthParam,
   registerSchema,
   transactionCreateSchema,
   transactionUpdateSchema,
 } from './validators';
-import { currentMonthInVietnam, isValidDate } from './dates';
+import { currentMonthInVietnam, isValidDate, monthEndExclusive, monthStart } from './dates';
 import { buildDashboardSummary } from './dashboard';
 import { deleteTransactionVector, embedTransactionById, upsertTransactionVectors } from './ai/embed';
 import { semanticSearch } from './ai/search';
@@ -287,8 +288,16 @@ app.patch('/categories/:id', requireAuth, async (c) => {
     icon: parsed.data.icon === undefined ? undefined : (parsed.data.icon ?? null),
     isArchived: parsed.data.isArchived,
   };
-  const ok = await db.updateCategory(c.env.DB, c.get('householdId'), c.req.param('id'), patch);
-  if (!ok) return c.json({ error: 'Không tìm thấy danh mục' }, 404);
+  try {
+    const ok = await db.updateCategory(c.env.DB, c.get('householdId'), c.req.param('id'), patch);
+    if (!ok) return c.json({ error: 'Không tìm thấy danh mục' }, 404);
+  } catch (err) {
+    // Đổi tên trùng một danh mục khác cùng loại — ràng buộc UNIQUE của bảng.
+    if (String(err).includes('UNIQUE')) {
+      return c.json({ error: 'Danh mục cùng tên và cùng loại đã tồn tại' }, 409);
+    }
+    throw err;
+  }
   return c.json(await db.getCategory(c.env.DB, c.get('householdId'), c.req.param('id')));
 });
 
@@ -328,6 +337,45 @@ app.get('/transactions', requireAuth, async (c) => {
   return c.json(await db.listTransactions(c.env.DB, c.get('householdId'), parsed.data));
 });
 
+/**
+ * Các khoản thu/chi vượt ngưỡng trong một tháng.
+ * Đặt trước '/transactions/:id' để 'large' không bị hiểu là một id.
+ */
+app.get('/transactions/large', requireAuth, async (c) => {
+  const raw = Object.fromEntries(new URL(c.req.url).searchParams.entries());
+  const parsed = largeQuerySchema.safeParse(raw);
+  if (!parsed.success) return c.json({ error: formatZodError(parsed.error) }, 400);
+
+  const householdId = c.get('householdId');
+  const month = parsed.data.month ?? currentMonthInVietnam();
+  const threshold = parsed.data.min ?? db.DEFAULT_LARGE_THRESHOLD;
+  const range = {
+    fromInclusive: monthStart(month),
+    toExclusive: monthEndExclusive(month),
+    threshold,
+    limit: parsed.data.limit,
+  };
+
+  const [expense, income, household] = await Promise.all([
+    db.listLargeTransactions(c.env.DB, householdId, { ...range, direction: 'expense' }),
+    db.listLargeTransactions(c.env.DB, householdId, { ...range, direction: 'income' }),
+    db.findHouseholdById(c.env.DB, householdId),
+  ]);
+  return c.json({
+    month,
+    threshold,
+    currency: household?.currency ?? 'VND',
+    income,
+    expense,
+  });
+});
+
+app.get('/transactions/:id', requireAuth, async (c) => {
+  const tx = await db.getTransaction(c.env.DB, c.get('householdId'), c.req.param('id'));
+  if (!tx) return c.json({ error: 'Không tìm thấy giao dịch' }, 404);
+  return c.json(tx);
+});
+
 /** Danh mục phải thuộc cùng hộ và đúng chiều thu/chi. */
 async function validateCategory(
   env: Env,
@@ -348,7 +396,11 @@ app.post('/transactions', requireAuth, async (c) => {
   const parsed = parseBody(transactionCreateSchema, await readJson(c));
   if (!parsed.ok) return c.json({ error: parsed.message }, 400);
   const householdId = c.get('householdId');
-  const input = { ...parsed.data, categoryId: parsed.data.categoryId ?? null };
+  const input = {
+    ...parsed.data,
+    categoryId: parsed.data.categoryId ?? null,
+    paymentMethod: parsed.data.paymentMethod ?? null,
+  };
 
   const categoryError = await validateCategory(c.env, householdId, input.categoryId, input.direction);
   if (categoryError) return c.json({ error: categoryError }, 400);

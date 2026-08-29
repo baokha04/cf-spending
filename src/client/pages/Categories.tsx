@@ -2,11 +2,20 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Category, Direction } from '../../shared/types';
 import { api } from '../lib/api';
 
+/** Trạng thái ô sửa tại chỗ của một danh mục. */
+interface EditState {
+  id: string;
+  name: string;
+  icon: string;
+}
+
 export function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('');
   const [kind, setKind] = useState<Direction>('expense');
+  const [edit, setEdit] = useState<EditState | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +46,24 @@ export function Categories() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tạo được danh mục');
+    }
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!edit) return;
+    setError(null);
+    setNotice(null);
+    setSaving(true);
+    try {
+      // Loại thu/chi không đổi được: đổi rồi thì các giao dịch cũ sẽ lệch chiều.
+      await api.updateCategory(edit.id, { name: edit.name, icon: edit.icon || null });
+      setEdit(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không sửa được danh mục');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -129,25 +156,70 @@ export function Categories() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((c) => (
-                        <tr key={c.id}>
-                          <td>
-                            {c.icon ? `${c.icon} ` : ''}
-                            {c.name}
-                          </td>
-                          <td>
-                            <span className="pill">{c.isArchived ? 'Đã lưu trữ' : 'Đang dùng'}</span>
-                          </td>
-                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <button type="button" className="ghost" onClick={() => void toggleArchive(c)}>
-                              {c.isArchived ? 'Dùng lại' : 'Lưu trữ'}
-                            </button>
-                            <button type="button" className="ghost danger" onClick={() => void remove(c)}>
-                              Xoá
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {rows.map((c) =>
+                        edit?.id === c.id ? (
+                          <tr key={c.id}>
+                            {/* Sửa ngay tại dòng: đổi tên và biểu tượng, giữ nguyên
+                                mọi giao dịch đang gắn với danh mục này. */}
+                            <td colSpan={3}>
+                              <form onSubmit={saveEdit} className="toolbar" style={{ marginBottom: 0 }}>
+                                <div className="field" style={{ width: 90 }}>
+                                  <label htmlFor="c-edit-icon">Biểu tượng</label>
+                                  <input
+                                    id="c-edit-icon"
+                                    maxLength={4}
+                                    placeholder="🍜"
+                                    value={edit.icon}
+                                    onChange={(e) => setEdit({ ...edit, icon: e.target.value })}
+                                  />
+                                </div>
+                                <div className="field" style={{ flex: '1 1 200px' }}>
+                                  <label htmlFor="c-edit-name">Tên</label>
+                                  <input
+                                    id="c-edit-name"
+                                    required
+                                    autoFocus
+                                    maxLength={60}
+                                    value={edit.name}
+                                    onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+                                  />
+                                </div>
+                                <button type="submit" className="primary" disabled={saving}>
+                                  {saving ? 'Đang lưu…' : 'Lưu'}
+                                </button>
+                                <button type="button" onClick={() => setEdit(null)} disabled={saving}>
+                                  Huỷ
+                                </button>
+                              </form>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr key={c.id}>
+                            <td>
+                              {c.icon ? `${c.icon} ` : ''}
+                              {c.name}
+                            </td>
+                            <td>
+                              <span className="pill">{c.isArchived ? 'Đã lưu trữ' : 'Đang dùng'}</span>
+                            </td>
+                            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button
+                                type="button"
+                                className="ghost"
+                                onClick={() => setEdit({ id: c.id, name: c.name, icon: c.icon ?? '' })}
+                              >
+                                Sửa
+                              </button>
+                              <button type="button" className="ghost" onClick={() => void toggleArchive(c)}>
+                                {c.isArchived ? 'Dùng lại' : 'Lưu trữ'}
+                              </button>
+                              <button type="button" className="ghost danger" onClick={() => void remove(c)}>
+                                Xoá
+                              </button>
+                            </td>
+                          </tr>
+                        ),
+                      )}
                     </tbody>
                   </table>
                 </div>

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { Transaction } from '../../shared/types';
 import { api } from '../lib/api';
 import { RECURRENCE_LABEL, fullDateLabel, money } from '../lib/format';
 import { useIsPhone } from '../lib/use-media-query';
+import { TransactionDetails, hasExtraInfo } from './TransactionDetails';
 
 interface Props {
   items: Transaction[];
@@ -14,6 +15,8 @@ interface Props {
 export function TransactionTable({ items, onChanged, onEdit, compact = false }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Mở chi tiết từng dòng, giữ theo id để danh sách tải thêm không làm mất chỗ đang mở.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   // Bảy cột không lọt màn hình 402pt của iPhone 16 Pro; cuộn ngang một bảng
   // rộng khó đọc hơn hẳn, nên trên điện thoại mỗi giao dịch là một thẻ.
   const isPhone = useIsPhone();
@@ -32,6 +35,14 @@ export function TransactionTable({ items, onChanged, onEdit, compact = false }: 
     }
   }
 
+  function toggleDetails(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
   if (items.length === 0) {
     return <p className="empty">Chưa có giao dịch nào.</p>;
   }
@@ -44,8 +55,22 @@ export function TransactionTable({ items, onChanged, onEdit, compact = false }: 
     </span>
   );
 
+  const detailsButton = (tx: Transaction) => (
+    <button
+      type="button"
+      className="ghost"
+      aria-expanded={expanded.has(tx.id)}
+      onClick={() => toggleDetails(tx.id)}
+      title={hasExtraInfo(tx) ? 'Xem thông tin chi tiết' : 'Khoản này chưa ghi chi tiết'}
+    >
+      {expanded.has(tx.id) ? 'Ẩn' : 'Chi tiết'}
+      {hasExtraInfo(tx) && <span className="has-detail" aria-label="đã có chi tiết" />}
+    </button>
+  );
+
   const actions = (tx: Transaction) => (
     <>
+      {detailsButton(tx)}
       {onEdit && (
         <button type="button" className="ghost" onClick={() => onEdit(tx)}>
           Sửa
@@ -87,6 +112,7 @@ export function TransactionTable({ items, onChanged, onEdit, compact = false }: 
                   </>
                 )}
               </div>
+              {expanded.has(tx.id) && <TransactionDetails tx={tx} />}
               <div className="tx-actions">{actions(tx)}</div>
             </li>
           ))}
@@ -113,21 +139,31 @@ export function TransactionTable({ items, onChanged, onEdit, compact = false }: 
           </thead>
           <tbody>
             {items.map((tx) => (
-              <tr key={tx.id}>
-                <td className="col-tight">{fullDateLabel(tx.occurredOn)}</td>
-                <td className="col-grow">
-                  {tx.note || <span style={{ color: 'var(--text-muted)' }}>(không ghi chú)</span>}
-                </td>
-                <td className="col-tight">
-                  {tx.categoryName ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                </td>
-                <td className="col-tight">
-                  <span className="pill">{RECURRENCE_LABEL[tx.recurrence]}</span>
-                </td>
-                {!compact && <td className="col-tight">{tx.createdByName}</td>}
-                <td className="num">{amount(tx)}</td>
-                <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{actions(tx)}</td>
-              </tr>
+              <Fragment key={tx.id}>
+                <tr>
+                  <td className="col-tight">{fullDateLabel(tx.occurredOn)}</td>
+                  <td className="col-grow">
+                    {tx.note || <span style={{ color: 'var(--text-muted)' }}>(không ghi chú)</span>}
+                  </td>
+                  <td className="col-tight">
+                    {tx.categoryName ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+                  <td className="col-tight">
+                    <span className="pill">{RECURRENCE_LABEL[tx.recurrence]}</span>
+                  </td>
+                  {!compact && <td className="col-tight">{tx.createdByName}</td>}
+                  <td className="num">{amount(tx)}</td>
+                  <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{actions(tx)}</td>
+                </tr>
+                {/* Chi tiết nằm ở dòng riêng trải hết bề ngang, không bóp cột nào. */}
+                {expanded.has(tx.id) && (
+                  <tr className="tx-detail-row">
+                    <td colSpan={compact ? 6 : 7}>
+                      <TransactionDetails tx={tx} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>

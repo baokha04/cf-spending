@@ -79,9 +79,22 @@ const amountSchema = z
     return rounded;
   });
 
+/** Hình thức thanh toán; null/chuỗi rỗng nghĩa là chưa ghi. */
+const paymentMethodSchema = z
+  .enum(['cash', 'bank', 'card', 'ewallet', 'other'])
+  .nullish()
+  .or(z.literal('').transform(() => null));
+
+/** Mô tả dài cho một khoản — chỗ ghi thêm thông tin của các khoản lớn. */
+const detailSchema = z.string().trim().max(2000, 'Phần chi tiết tối đa 2000 ký tự');
+const payeeSchema = z.string().trim().max(120, 'Tên bên nhận/nguồn tiền tối đa 120 ký tự');
+
 export const transactionCreateSchema = z.object({
   occurredOn: isoDate,
   note: z.string().trim().max(500).default(''),
+  detail: detailSchema.default(''),
+  payee: payeeSchema.default(''),
+  paymentMethod: paymentMethodSchema,
   amount: amountSchema,
   direction: z.enum(['income', 'expense']),
   recurrence: z.enum(['monthly', 'one_off']),
@@ -92,12 +105,22 @@ export const transactionUpdateSchema = z
   .object({
     occurredOn: isoDate.optional(),
     note: z.string().trim().max(500).optional(),
+    detail: detailSchema.optional(),
+    payee: payeeSchema.optional(),
+    paymentMethod: paymentMethodSchema,
     amount: amountSchema.optional(),
     direction: z.enum(['income', 'expense']).optional(),
     recurrence: z.enum(['monthly', 'one_off']).optional(),
     categoryId: z.string().trim().min(1).nullish(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Không có trường nào để cập nhật' });
+
+export const largeQuerySchema = z.object({
+  month: monthParam.optional(),
+  /** Ngưỡng "khoản lớn" tính bằng đồng. */
+  min: z.coerce.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
 
 export const askSchema = z.object({
   question: z.string().trim().min(3, 'Câu hỏi quá ngắn').max(500),

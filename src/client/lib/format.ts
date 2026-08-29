@@ -79,5 +79,36 @@ export function shiftMonth(month: string, delta: number): string {
   return `${String(year).padStart(4, '0')}-${String(mm).padStart(2, '0')}`;
 }
 
+const dateTimeFormat = new Intl.DateTimeFormat('vi-VN', {
+  timeZone: 'Asia/Ho_Chi_Minh',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** Mốc epoch ms → '14/08/2026 21:05' theo giờ Việt Nam. */
+export function dateTimeLabel(ms: number): string {
+  return dateTimeFormat.format(new Date(ms));
+}
+
+export const PAYMENT_METHOD_LABEL = {
+  cash: 'Tiền mặt',
+  bank: 'Chuyển khoản',
+  card: 'Thẻ',
+  ewallet: 'Ví điện tử',
+  other: 'Khác',
+} as const;
+
+/** Thứ tự hiển thị trong ô chọn hình thức thanh toán. */
+export const PAYMENT_METHODS = ['cash', 'bank', 'card', 'ewallet', 'other'] as const;
+
+/** Tỷ trọng của một phần trên tổng; trả '—' khi chưa có tổng để so. */
+export function shareLabel(part: number, total: number): string {
+  if (total <= 0) return '—';
+  return formatPercent((part / total) * 100);
+}
+
 export const DIRECTION_LABEL = { income: 'Thu', expense: 'Chi' } as const;
 export const RECURRENCE_LABEL = { monthly: 'Hàng tháng', one_off: 'Phát sinh' } as const;

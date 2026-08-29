@@ -1,7 +1,25 @@
 import { useEffect, useState } from 'react';
-import type { Category, Direction, Recurrence, Transaction } from '../../shared/types';
+import type {
+  Category,
+  Direction,
+  PaymentMethod,
+  Recurrence,
+  Transaction,
+} from '../../shared/types';
 import { api } from '../lib/api';
-import { todayISO } from '../lib/format';
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, money, todayISO } from '../lib/format';
+
+/**
+ * Từ mức này trở lên, phần chi tiết tự mở sẵn: khoản lớn là thứ vài tháng sau
+ * nhìn lại sẽ không nhớ nổi đã chi cho việc gì.
+ */
+export const LARGE_AMOUNT = 1_000_000;
+
+/** Số tiền người dùng gõ có thể có dấu phân cách — bỏ ra để so với ngưỡng. */
+function parseAmount(raw: string): number {
+  const n = Number(raw.replace(/[.,\s]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
 
 interface Props {
   categories: Category[];
@@ -11,9 +29,17 @@ interface Props {
   onCancel?: () => void;
 }
 
+/** Một khoản đã ghi sẵn thông tin chi tiết nào chưa? */
+function hasDetails(tx: Transaction | null): boolean {
+  return Boolean(tx && (tx.detail || tx.payee || tx.paymentMethod));
+}
+
 interface FormState {
   occurredOn: string;
   note: string;
+  detail: string;
+  payee: string;
+  paymentMethod: PaymentMethod | '';
   amount: string;
   direction: Direction;
   recurrence: Recurrence;
@@ -25,6 +51,9 @@ function initialState(editing: Transaction | null): FormState {
     ? {
         occurredOn: editing.occurredOn,
         note: editing.note,
+        detail: editing.detail,
+        payee: editing.payee,
+        paymentMethod: editing.paymentMethod ?? '',
         amount: String(editing.amount),
         direction: editing.direction,
         recurrence: editing.recurrence,
@@ -33,6 +62,9 @@ function initialState(editing: Transaction | null): FormState {
     : {
         occurredOn: todayISO(),
         note: '',
+        detail: '',
+        payee: '',
+        paymentMethod: '',
         amount: '',
         direction: 'expense',
         recurrence: 'one_off',
@@ -44,8 +76,17 @@ export function TransactionForm({ categories, editing, onSaved, onCancel }: Prop
   const [form, setForm] = useState<FormState>(() => initialState(editing));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Người dùng đã tự bấm mở/đóng phần chi tiết chưa; null nghĩa là để tự quyết.
+  const [detailOpen, setDetailOpen] = useState<boolean | null>(null);
 
-  useEffect(() => setForm(initialState(editing)), [editing]);
+  useEffect(() => {
+    setForm(initialState(editing));
+    setDetailOpen(null);
+  }, [editing]);
+
+  const amountValue = parseAmount(form.amount);
+  const isLarge = amountValue >= LARGE_AMOUNT;
+  const showDetails = detailOpen ?? (isLarge || hasDetails(editing));
 
   // Danh mục phải cùng chiều thu/chi với giao dịch, nếu không backend sẽ từ chối.
   const options = categories.filter((c) => c.kind === form.direction);
@@ -66,6 +107,9 @@ export function TransactionForm({ categories, editing, onSaved, onCancel }: Prop
     const payload = {
       occurredOn: form.occurredOn,
       note: form.note,
+      detail: form.detail,
+      payee: form.payee,
+      paymentMethod: form.paymentMethod || null,
       amount: form.amount,
       direction: form.direction,
       recurrence: form.recurrence,
@@ -167,6 +211,67 @@ export function TransactionForm({ categories, editing, onSaved, onCancel }: Prop
             <option value="monthly">Hàng tháng (cố định)</option>
           </select>
         </div>
+      </div>
+
+      <div className="detail-block">
+        <button
+          type="button"
+          className="ghost detail-toggle"
+          aria-expanded={showDetails}
+          onClick={() => setDetailOpen(!showDetails)}
+        >
+          {showDetails ? '▾' : '▸'} Chi tiết khoản này
+          {!showDetails && isLarge && <span className="pill warn">Nên ghi</span>}
+        </button>
+        {showDetails && (
+          <>
+            {isLarge && !form.detail.trim() && (
+              <p className="card-sub" style={{ marginTop: 0 }}>
+                Khoản từ {money(LARGE_AMOUNT)} trở lên nên ghi rõ để sau này còn tra lại.
+              </p>
+            )}
+            <div className="field-row">
+              <div className="field">
+                <label htmlFor="tx-payee">
+                  {form.direction === 'income' ? 'Nhận từ' : 'Trả cho'}
+                </label>
+                <input
+                  id="tx-payee"
+                  maxLength={120}
+                  placeholder={form.direction === 'income' ? 'Công ty ABC…' : 'Cửa hàng, bệnh viện…'}
+                  value={form.payee}
+                  onChange={(e) => set('payee', e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="tx-method">Hình thức</label>
+                <select
+                  id="tx-method"
+                  value={form.paymentMethod}
+                  onChange={(e) => set('paymentMethod', e.target.value as PaymentMethod | '')}
+                >
+                  <option value="">— Chưa ghi —</option>
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {PAYMENT_METHOD_LABEL[m]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="tx-detail">Chi tiết</label>
+              <textarea
+                id="tx-detail"
+                rows={3}
+                maxLength={2000}
+                placeholder="Gồm những gì, vì sao chi, đã trả bao nhiêu đợt, giấy tờ kèm theo…"
+                value={form.detail}
+                onChange={(e) => set('detail', e.target.value)}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>

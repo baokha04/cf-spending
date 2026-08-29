@@ -2,8 +2,10 @@ import type {
   AskResponse,
   Category,
   DashboardSummary,
+  LargeTransactionsResponse,
   MeResponse,
   Member,
+  PaymentMethod,
   SearchResponse,
   Transaction,
   TransactionPage,
@@ -51,6 +53,9 @@ function query(params: Record<string, string | number | undefined | null>): stri
 export interface TransactionInput {
   occurredOn: string;
   note: string;
+  detail: string;
+  payee: string;
+  paymentMethod: PaymentMethod | null;
   amount: number | string;
   direction: 'income' | 'expense';
   recurrence: 'monthly' | 'one_off';
@@ -98,6 +103,9 @@ export const api = {
 
   transactions: (q: TransactionQuery = {}) =>
     request<TransactionPage>(`/transactions${query({ ...q })}`),
+  transaction: (id: string) => request<Transaction>(`/transactions/${id}`),
+  largeTransactions: (q: { month?: string; min?: number; limit?: number } = {}) =>
+    request<LargeTransactionsResponse>(`/transactions/large${query({ ...q })}`),
   createTransaction: (body: TransactionInput) => post<Transaction>('/transactions', body),
   updateTransaction: (id: string, body: Partial<TransactionInput>) =>
     request<Transaction>(`/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
