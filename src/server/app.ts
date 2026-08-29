@@ -91,6 +91,10 @@ app.post('/auth/register', async (c) => {
   let householdId: string;
   let role: 'owner' | 'member';
 
+  // Cả việc tạo hộ lẫn tạo tài khoản đi chung một batch (D1 batch là một
+  // transaction), nếu không một lỗi ở bước sau sẽ để lại hộ mồ côi không ai vào được.
+  const statements: D1PreparedStatement[] = [];
+
   if (inviteCode) {
     const household = await db.findHouseholdByInviteCode(c.env.DB, normalizeInviteCode(inviteCode));
     if (!household) return c.json({ error: 'Mã mời không đúng' }, 404);
@@ -99,16 +103,16 @@ app.post('/auth/register', async (c) => {
   } else {
     householdId = newId();
     role = 'owner';
-    await c.env.DB.prepare(
-      'INSERT INTO households (id, name, invite_code, currency, created_at) VALUES (?, ?, ?, ?, ?)',
-    )
-      .bind(householdId, householdName!, newInviteCode(), 'VND', now)
-      .run();
+    statements.push(
+      c.env.DB.prepare(
+        'INSERT INTO households (id, name, invite_code, currency, created_at) VALUES (?, ?, ?, ?, ?)',
+      ).bind(householdId, householdName!, newInviteCode(), 'VND', now),
+    );
   }
 
   const userId = newId();
   const pw = await hashPassword(password);
-  const statements = [
+  statements.push(
     c.env.DB.prepare(
       `INSERT INTO users (id, email, password_hash, password_salt, kdf_iterations, display_name, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -116,7 +120,7 @@ app.post('/auth/register', async (c) => {
     c.env.DB.prepare(
       'INSERT INTO memberships (user_id, household_id, role, joined_at) VALUES (?, ?, ?, ?)',
     ).bind(userId, householdId, role, now),
-  ];
+  );
 
   // Hộ mới thì kèm luôn bộ danh mục mặc định để dùng được ngay.
   if (role === 'owner') {
