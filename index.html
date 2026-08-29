@@ -2,8 +2,22 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: nội dung tràn tới mép màn hình iPhone; phần khuyết
+         Dynamic Island và thanh Home được CSS chừa lại bằng env(safe-area-inset-*). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta name="color-scheme" content="light dark" />
+    <!-- Màu thanh trạng thái khớp nền trang để không lộ vệt màu lạ khi cuộn. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9f9f7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0d0d" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Chi tiêu" />
+    <!-- Safari tự biến dãy số thành link gọi điện, làm hỏng cột số tiền. -->
+    <meta name="format-detection" content="telephone=no" />
     <title>Chi tiêu gia đình</title>
   </head>
   <body>

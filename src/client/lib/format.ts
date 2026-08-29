@@ -14,6 +14,15 @@ export function moneyShort(n: number): string {
   return String(n);
 }
 
+/**
+ * Gọn hơn moneyShort cho trục dọc hẹp trên điện thoại: '60tr', '1,5tr', '850ng'.
+ * Cột nhãn chỉ còn 44pt; để nguyên khoảng trắng thì Recharts ngắt xuống hai
+ * dòng và dòng trên bị cắt mất khỏi khung biểu đồ.
+ */
+export function moneyAxisTight(n: number): string {
+  return moneyShort(n).replace(/,0(?= )/, '').replace(' ', '');
+}
+
 export function signedMoney(n: number): string {
   return `${n > 0 ? '+' : n < 0 ? '−' : ''}${money(Math.abs(n))}`;
 }

@@ -10,12 +10,19 @@ import {
   YAxis,
 } from 'recharts';
 import type { CategoryBreakdownRow, DailyPoint, MonthTotals } from '../../shared/types';
-import { money, moneyShort, monthLabel } from '../lib/format';
+import { money, moneyAxisTight, moneyShort, monthLabel } from '../lib/format';
+import { useIsPhone } from '../lib/use-media-query';
 import { AXIS_STYLE, Legend, SERIES, TableView, VizTooltip } from './viz';
 
 const GRID = 'var(--grid)';
 const AXIS_LINE = { stroke: 'var(--axis)' };
 const BAR_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
+
+/* Recharts nhận bề rộng trục và chiều cao bằng số nên không đặt được trong
+   stylesheet — phải tự chọn theo bề ngang màn hình. Trên iPhone 16 Pro khung
+   biểu đồ chỉ còn khoảng 342pt sau khi trừ lề trang và lề thẻ. */
+const AXIS_W = { wide: 56, phone: 44 } as const;
+const CHART_H = { wide: 230, phone: 200 } as const;
 
 interface MonthsProps {
   months: { current: string; previous: string };
@@ -32,14 +39,22 @@ export function IncomeExpenseChart({
     { name: 'Chi ra', current: totals.current.expense, previous: totals.previous.expense },
   ];
 
+  const isPhone = useIsPhone();
+
   return (
     <>
       <Legend currentLabel={monthLabel(months.current)} previousLabel={monthLabel(months.previous)} />
-      <ResponsiveContainer width="100%" height={230}>
-        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }} barGap={2}>
+      <ResponsiveContainer width="100%" height={isPhone ? CHART_H.phone : CHART_H.wide}>
+        <BarChart data={data} margin={{ top: isPhone ? 14 : 8, right: 8, bottom: 0, left: 0 }} barGap={2}>
           <CartesianGrid vertical={false} stroke={GRID} />
           <XAxis dataKey="name" tick={AXIS_STYLE} axisLine={AXIS_LINE} tickLine={false} />
-          <YAxis tickFormatter={moneyShort} tick={AXIS_STYLE} axisLine={false} tickLine={false} width={56} />
+          <YAxis
+            tickFormatter={isPhone ? moneyAxisTight : moneyShort}
+            tick={AXIS_STYLE}
+            axisLine={false}
+            tickLine={false}
+            width={isPhone ? AXIS_W.phone : AXIS_W.wide}
+          />
           <Tooltip content={<VizTooltip />} cursor={{ fill: 'var(--surface-2)' }} />
           <Bar dataKey="current" name={monthLabel(months.current)} fill={SERIES.current} radius={BAR_RADIUS} maxBarSize={54} />
           <Bar dataKey="previous" name={monthLabel(months.previous)} fill={SERIES.previous} radius={BAR_RADIUS} maxBarSize={54} />
@@ -75,6 +90,7 @@ export function RecurrenceChart({
   totals,
   months,
 }: MonthsProps & { totals: { current: MonthTotals; previous: MonthTotals } }) {
+  const isPhone = useIsPhone();
   const data = [
     {
       name: 'Cố định hàng tháng',
@@ -91,11 +107,25 @@ export function RecurrenceChart({
   return (
     <>
       <Legend currentLabel={monthLabel(months.current)} previousLabel={monthLabel(months.previous)} />
-      <ResponsiveContainer width="100%" height={230}>
-        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }} barGap={2}>
+      <ResponsiveContainer width="100%" height={isPhone ? CHART_H.phone : CHART_H.wide}>
+        <BarChart data={data} margin={{ top: isPhone ? 14 : 8, right: 8, bottom: 0, left: 0 }} barGap={2}>
           <CartesianGrid vertical={false} stroke={GRID} />
-          <XAxis dataKey="name" tick={AXIS_STYLE} axisLine={AXIS_LINE} tickLine={false} />
-          <YAxis tickFormatter={moneyShort} tick={AXIS_STYLE} axisLine={false} tickLine={false} width={56} />
+          <XAxis
+            dataKey="name"
+            tick={AXIS_STYLE}
+            axisLine={AXIS_LINE}
+            tickLine={false}
+            /* Trục X chỉ rộng bằng nửa khung trên điện thoại; nhãn đầy đủ sẽ bị
+               cắt cụt. Bảng số liệu bên dưới vẫn giữ tên gốc. */
+            tickFormatter={(name: string) => (isPhone ? name.replace(' hàng tháng', '') : name)}
+          />
+          <YAxis
+            tickFormatter={isPhone ? moneyAxisTight : moneyShort}
+            tick={AXIS_STYLE}
+            axisLine={false}
+            tickLine={false}
+            width={isPhone ? AXIS_W.phone : AXIS_W.wide}
+          />
           <Tooltip content={<VizTooltip />} cursor={{ fill: 'var(--surface-2)' }} />
           <Bar dataKey="current" name={monthLabel(months.current)} fill={SERIES.current} radius={BAR_RADIUS} maxBarSize={54} />
           <Bar dataKey="previous" name={monthLabel(months.previous)} fill={SERIES.previous} radius={BAR_RADIUS} maxBarSize={54} />
@@ -133,6 +163,7 @@ export function CategoryChart({
   rows,
   months,
 }: MonthsProps & { rows: CategoryBreakdownRow[] }) {
+  const isPhone = useIsPhone();
   const expenses = rows.filter((r) => r.kind === 'expense' && (r.current > 0 || r.previous > 0));
   // Quá 8 danh mục thì gộp phần đuôi vào "Danh mục khác" thay vì sinh thêm màu.
   const head = expenses.slice(0, MAX_CATEGORY_BARS);
@@ -156,22 +187,38 @@ export function CategoryChart({
   return (
     <>
       <Legend currentLabel={monthLabel(months.current)} previousLabel={monthLabel(months.previous)} />
-      <ResponsiveContainer width="100%" height={Math.max(200, data.length * 46)}>
+      <ResponsiveContainer
+        width="100%"
+        height={Math.max(isPhone ? 180 : 200, data.length * (isPhone ? 42 : 46))}
+      >
         <BarChart
           data={data}
           layout="vertical"
-          margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+          margin={{ top: 4, right: isPhone ? 6 : 16, bottom: 4, left: 0 }}
           barGap={2}
         >
           <CartesianGrid horizontal={false} stroke={GRID} />
-          <XAxis type="number" tickFormatter={moneyShort} tick={AXIS_STYLE} axisLine={false} tickLine={false} />
+          <XAxis
+            type="number"
+            tickFormatter={isPhone ? moneyAxisTight : moneyShort}
+            tick={AXIS_STYLE}
+            axisLine={false}
+            tickLine={false}
+            /* Ít vạch chia hơn để nhãn tiền không chồng lên nhau ở khung hẹp. */
+            tickCount={isPhone ? 4 : 5}
+          />
           <YAxis
             type="category"
             dataKey="name"
             tick={AXIS_STYLE}
             axisLine={AXIS_LINE}
             tickLine={false}
-            width={112}
+            width={isPhone ? 88 : 112}
+            /* Cột nhãn hẹp lại thì tên dài phải cắt bớt, nếu không Recharts
+               vẽ đè lên vùng cột. Tên đầy đủ vẫn có trong bảng số liệu. */
+            tickFormatter={(name: string) =>
+              isPhone && name.length > 13 ? `${name.slice(0, 12)}…` : name
+            }
           />
           <Tooltip content={<VizTooltip />} cursor={{ fill: 'var(--surface-2)' }} />
           <Bar dataKey="current" name={monthLabel(months.current)} fill={SERIES.current} radius={[0, 4, 4, 0]} maxBarSize={15} />
@@ -220,6 +267,7 @@ function cumulative(points: DailyPoint[]): DailyPoint[] {
 }
 
 export function PaceChart({ points, months }: MonthsProps & { points: DailyPoint[] }) {
+  const isPhone = useIsPhone();
   const data = cumulative(points);
   const hasData = data.some((d) => d.current > 0 || d.previous > 0);
   if (!hasData) return <p className="empty">Chưa có khoản chi nào để vẽ tốc độ chi tiêu.</p>;
@@ -227,19 +275,27 @@ export function PaceChart({ points, months }: MonthsProps & { points: DailyPoint
   return (
     <>
       <Legend currentLabel={monthLabel(months.current)} previousLabel={monthLabel(months.previous)} />
-      <ResponsiveContainer width="100%" height={230}>
+      <ResponsiveContainer width="100%" height={isPhone ? CHART_H.phone : CHART_H.wide}>
         {/* Chừa lề phải rộng để nhãn ngày cuối tháng không bị cắt. */}
-        <LineChart data={data} margin={{ top: 8, right: 28, bottom: 0, left: 8 }}>
+        <LineChart data={data} margin={{ top: isPhone ? 14 : 8, right: isPhone ? 14 : 28, bottom: 0, left: 0 }}>
           <CartesianGrid vertical={false} stroke={GRID} />
           <XAxis
             dataKey="day"
             tick={AXIS_STYLE}
             axisLine={AXIS_LINE}
             tickLine={false}
-            interval={4}
+            /* Trục chỉ còn khoảng 280pt trên điện thoại; thưa vạch ra để nhãn
+               vẫn giữ được chữ "Ngày" mà không dính vào nhau. */
+            interval={isPhone ? 7 : 4}
             tickFormatter={(d: number) => `Ngày ${d}`}
           />
-          <YAxis tickFormatter={moneyShort} tick={AXIS_STYLE} axisLine={false} tickLine={false} width={56} />
+          <YAxis
+            tickFormatter={isPhone ? moneyAxisTight : moneyShort}
+            tick={AXIS_STYLE}
+            axisLine={false}
+            tickLine={false}
+            width={isPhone ? AXIS_W.phone : AXIS_W.wide}
+          />
           <Tooltip
             content={<VizTooltip labelFormatter={(d) => `Tới hết ngày ${d}`} />}
             cursor={{ stroke: 'var(--axis)', strokeWidth: 1 }}

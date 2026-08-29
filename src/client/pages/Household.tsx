@@ -3,6 +3,7 @@ import type { Member } from '../../shared/types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { fullDateLabel } from '../lib/format';
+import { useIsPhone } from '../lib/use-media-query';
 
 export function Household() {
   const { me, setMe, refresh } = useAuth();
@@ -10,6 +11,9 @@ export function Household() {
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Cột email dài làm bảng bốn cột tràn khỏi màn hình 402pt; trên điện thoại
+  // mỗi thành viên là một khối xếp dọc.
+  const isPhone = useIsPhone();
 
   const load = useCallback(async () => {
     try {
@@ -95,31 +99,50 @@ export function Household() {
       <section className="card">
         <h2 className="card-title">Thành viên</h2>
         <p className="card-sub">{members.length} người</p>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Tên</th>
-                <th>Email</th>
-                <th>Vai trò</th>
-                <th>Tham gia</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((m) => (
-                <tr key={m.userId}>
-                  <td>
-                    {m.displayName}
-                    {m.userId === user.id && <span className="pill" style={{ marginLeft: 8 }}>Bạn</span>}
-                  </td>
-                  <td>{m.email}</td>
-                  <td>{m.role === 'owner' ? 'Chủ hộ' : 'Thành viên'}</td>
-                  <td>{fullDateLabel(new Date(m.joinedAt).toISOString().slice(0, 10))}</td>
+        {isPhone ? (
+          <ul className="member-cards">
+            {members.map((m) => (
+              <li className="member-card" key={m.userId}>
+                <div className="member-name">
+                  {m.displayName}
+                  {m.userId === user.id && <span className="pill" style={{ marginLeft: 8 }}>Bạn</span>}
+                </div>
+                <div className="member-email">{m.email}</div>
+                <div className="member-meta">
+                  <span>{m.role === 'owner' ? 'Chủ hộ' : 'Thành viên'}</span>
+                  <span className="dot" aria-hidden="true">·</span>
+                  <span>Tham gia {fullDateLabel(new Date(m.joinedAt).toISOString().slice(0, 10))}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên</th>
+                  <th>Email</th>
+                  <th>Vai trò</th>
+                  <th>Tham gia</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {members.map((m) => (
+                  <tr key={m.userId}>
+                    <td>
+                      {m.displayName}
+                      {m.userId === user.id && <span className="pill" style={{ marginLeft: 8 }}>Bạn</span>}
+                    </td>
+                    <td>{m.email}</td>
+                    <td>{m.role === 'owner' ? 'Chủ hộ' : 'Thành viên'}</td>
+                    <td>{fullDateLabel(new Date(m.joinedAt).toISOString().slice(0, 10))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="card">
