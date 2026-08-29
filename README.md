@@ -93,10 +93,18 @@ và chỉ Pages mới hiểu thư mục `functions/`.
 Một lần duy nhất, chuẩn bị project Pages:
 
 1. `npm run cf:setup` tạo project Pages `cf-spending` (nhánh production `dev`).
-2. Trong Settings của project, gắn ba binding cho cả Production lẫn Preview: `DB`
-   (D1 `cf-spending`), `VECTORIZE` (chỉ mục `spending-tx`), `AI` (Workers AI), và biến
-   `AI_FEATURES=on`. Pages đọc binding từ dashboard chứ không từ `wrangler.jsonc`, nên
-   `database_id` trong file đó chỉ phục vụ máy mình — không cần commit id thật.
+2. `npm run db:migrate` áp schema cho D1 trên Cloudflare (`cf:setup` chỉ chạy bản local).
+
+`wrangler pages deploy` đẩy luôn binding lấy từ `wrangler.jsonc` vào cấu hình
+Production của project, nên **không phải gắn tay `DB`/`VECTORIZE`/`AI` trong dashboard**
+— sau lần deploy đầu, Settings của project đã có sẵn cả ba binding lẫn biến
+`AI_FEATURES=on`. Đổi lại, `database_id` thật **phải** nằm trong `wrangler.jsonc` và
+được commit: thiếu nó thì bản deploy lên production trỏ vào một D1 không tồn tại.
+Id này không phải bí mật — nó vô dụng nếu không có API token.
+
+Riêng môi trường **Preview** thì `wrangler pages deploy --branch=<nhánh khác>` mới
+điền binding; chừng nào chưa deploy preview lần nào, phần Preview trong Settings vẫn
+trống và các bản preview sẽ hỏng khi chạm `env.DB`.
 
 Deploy tay:
 
@@ -113,6 +121,15 @@ Actions):
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | My Profile → API Tokens → Create Token, quyền **Cloudflare Pages: Edit** |
 | `CLOUDFLARE_ACCOUNT_ID` | Trang chủ dashboard, cột bên phải |
+
+Phải là **repository secret**, không phải environment secret: đặt nhầm chỗ thì workflow
+vẫn chạy nhưng hai biến rỗng và wrangler báo `Not logged in`.
+
+Token chỉ có `Cloudflare Pages: Edit` là đủ cho workflow deploy. Nhưng nếu định chạy
+`npm run cf:setup` hay `npm run db:migrate` bằng token đó thì cần thêm **D1: Edit** và
+**Vectorize: Edit**. Vừa sửa quyền cho một token xong, Cloudflare mất vài phút để lan
+truyền — trong lúc đó cùng một lệnh có thể lúc chạy được lúc báo
+`Authentication error [code: 10000]`; cứ thử lại là qua.
 
 Cố tình không dùng Connect to Git của dashboard — xem mục dưới.
 
