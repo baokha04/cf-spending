@@ -88,39 +88,54 @@ npm run dev              # cửa sổ 2 — http://localhost:5173
 ## Triển khai
 
 App chạy trên **Cloudflare Pages**, không phải Worker: API nằm ở `functions/api/[[path]].ts`
-và chỉ Pages mới hiểu thư mục `functions/`. Loại project phải chọn đúng ngay từ đầu.
+và chỉ Pages mới hiểu thư mục `functions/`.
 
-Deploy từ máy mình:
+Một lần duy nhất, chuẩn bị project Pages:
+
+1. `npm run cf:setup` tạo project Pages `cf-spending` (nhánh production `dev`).
+2. Trong Settings của project, gắn ba binding cho cả Production lẫn Preview: `DB`
+   (D1 `cf-spending`), `VECTORIZE` (chỉ mục `spending-tx`), `AI` (Workers AI), và biến
+   `AI_FEATURES=on`. Pages đọc binding từ dashboard chứ không từ `wrangler.jsonc`, nên
+   `database_id` trong file đó chỉ phục vụ máy mình — không cần commit id thật.
+
+Deploy tay:
 
 ```bash
 npm run deploy      # = npm run build && wrangler pages deploy
 ```
 
-Deploy tự động mỗi lần push thì nối repo vào **project Pages** (Workers & Pages → Pages
-→ Connect to Git), với:
+Deploy tự động: `.github/workflows/deploy.yml` chạy mỗi lần push lên `dev` (và chạy tay
+được qua Actions → Deploy Pages). Nó cài dependency, chạy test, build, rồi
+`wrangler pages deploy`. Thêm hai secret trong repo (Settings → Secrets and variables →
+Actions):
 
-| Thiết lập | Giá trị |
+| Secret | Lấy ở đâu |
 |---|---|
-| Framework preset | None |
-| Build command | `npm run build` |
-| Build output directory | `dist` |
-| Root directory | (để trống) |
+| `CLOUDFLARE_API_TOKEN` | My Profile → API Tokens → Create Token, quyền **Cloudflare Pages: Edit** |
+| `CLOUDFLARE_ACCOUNT_ID` | Trang chủ dashboard, cột bên phải |
 
-Rồi trong Settings của project Pages, gắn ba binding cho cả Production lẫn Preview:
-`DB` (D1 `cf-spending`), `VECTORIZE` (chỉ mục `spending-tx`), `AI` (Workers AI), và biến
-`AI_FEATURES=on`. Pages lấy binding từ dashboard chứ không đọc `wrangler.jsonc`, nên
-`database_id` trong file đó chỉ phục vụ máy mình — không cần commit id thật.
+Cố tình không dùng Connect to Git của dashboard — xem mục dưới.
 
-### Build lỗi "Missing entry-point to Worker script or to assets directory"
+### Build trên Cloudflare báo lỗi ở bước deploy
 
-Nghĩa là repo đang được deploy như một **Worker** (Workers Builds) chứ không phải Pages.
-Workers Builds chạy `npx wrangler deploy`, mà lệnh đó đòi `main` hoặc `assets` trong
-`wrangler.jsonc` — repo này cố tình không có, vì nó dùng `pages_build_output_dir`. Import
-repo từ mục Workers trên dashboard là dính lỗi này.
+Hai câu lỗi dưới đây đều nói cùng một chuyện: repo đang được deploy như một **Worker**
+(Workers Builds), mà Workers Builds chạy `npx wrangler deploy` — lệnh của Worker, không
+phải của Pages.
 
-Cách sửa: xoá project Worker vừa tạo, rồi tạo lại đúng loại Pages — `npm run cf:setup`
-làm sẵn (hoặc `npx wrangler pages project create cf-spending`), sau đó vào project Pages
-đó Connect to Git theo bảng trên.
+| Lỗi | Nghĩa là |
+|---|---|
+| `Missing entry-point to Worker script or to assets directory` | `wrangler deploy` không thấy `wrangler.jsonc` (sai Root directory), nên đòi `main`/`assets` |
+| `It looks like you've run a Workers-specific command in a Pages project` | `wrangler deploy` đã đọc được `wrangler.jsonc` và thấy đây là project Pages |
+
+Sửa Deploy command của Workers Build cũng không cứu được: một Workers Build gắn với một
+Worker, còn repo này cần project Pages. Xoá Worker đã import đi (Workers & Pages → chọn
+Worker → Settings → Delete) rồi để GitHub Actions ở trên deploy — đường đó không đụng tới
+Connect to Git nên không bao giờ dựng nhầm Workers Build nữa.
+
+Muốn dùng Git integration của Cloudflare thì phải bấm Connect to Git **từ bên trong
+project Pages** (không phải import repo ở mục Workers), với Framework preset None, build
+command `npm run build`, output directory `dist`, root directory để trống — và khi đó nên
+tắt workflow GitHub Actions cho khỏi deploy hai lần.
 
 ## Kiểm thử
 
@@ -137,7 +152,8 @@ năm nhuận, và trường hợp tháng trước rỗng).
 
 ```
 functions/api/[[path]].ts   Cửa ngõ Pages Function, chuyển tiếp cho Hono
-scripts/cf-setup.mjs        Dựng D1 + Vectorize + .dev.vars (npm run cf:setup)
+scripts/cf-setup.mjs        Dựng D1 + Vectorize + Pages project (npm run cf:setup)
+.github/workflows/          CI deploy lên Pages khi push nhánh dev
 migrations/                 Migration D1
 src/server/
   app.ts                    Toàn bộ route
