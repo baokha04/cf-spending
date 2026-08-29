@@ -16,7 +16,7 @@ khoản có thể vào chung một hộ gia đình qua mã mời để thấy ch
 | Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước |
 | Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
-| Danh mục | Thêm, **sửa tên và biểu tượng**, lưu trữ hoặc xoá. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
+| Danh mục | Thêm, **sửa tên và biểu tượng** (chọn từ bảng icon có sẵn), lưu trữ hoặc xoá. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
 | Hộ gia đình | Thành viên và mã mời |
 
@@ -221,6 +221,12 @@ nút xoá không được phép là thao tác một chiều.
   xoá sẽ **khôi phục chính danh mục cũ** (kèm biểu tượng mới) thay vì báo lỗi trùng
   tên về một hàng người dùng không nhìn thấy. Trùng tên với danh mục đang dùng thì
   vẫn trả 409 như cũ.
+
+**Biểu tượng chọn từ danh sách cố định.** `src/client/lib/icons.ts` giữ khoảng 90
+biểu tượng chia mười nhóm, mỗi cái kèm nhãn tiếng Việt vừa làm `aria-label` vừa làm
+từ khoá cho ô tìm (bỏ dấu, nên gõ "ca phe" cũng ra ☕). Gõ emoji bằng bàn phím thì
+mỗi máy một kiểu và dễ ra ký tự lạ. Biểu tượng nhập tay từ trước vẫn hiển thị bình
+thường — API không siết lại, danh sách chỉ ràng buộc phần chọn trên giao diện.
 
 **Sao chép giao dịch.** Nút *Sao chép* điền sẵn form bằng đúng nội dung, số tiền,
 danh mục và cả phần chi tiết của một giao dịch cũ, chỉ đổi ngày thành hôm nay, rồi
