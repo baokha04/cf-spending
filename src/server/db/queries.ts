@@ -1294,6 +1294,74 @@ export async function restoreActivity(
   return (res.meta.changes ?? 0) > 0;
 }
 
+/**
+ * Chép mọi khuôn mẫu đang dùng của một người sang một người khác.
+ *
+ * Đi một D1 batch (batch là một transaction) để không bao giờ để lại nửa cái
+ * lịch nếu có câu nào hỏng giữa chừng.
+ *
+ * Ngoại lệ KHÔNG được chép: "Mẹ nghỉ buổi 2/9" là chuyện riêng của Mẹ, đem sang
+ * người khác là sai. Bản chép luôn là lịch sạch theo đúng khuôn mẫu.
+ */
+export async function copyActivitiesToMember(
+  db: D1Database,
+  householdId: string,
+  fromMemberId: string,
+  toMemberId: string,
+  now: number,
+): Promise<number> {
+  const { results } = await db
+    .prepare(
+      `SELECT title, kind, location, note, days_of_week, start_minute, duration_min,
+              effective_from, effective_to
+       FROM activities
+       WHERE household_id = ? AND member_id = ? AND deleted_at IS NULL
+       ORDER BY start_minute, title`,
+    )
+    .bind(householdId, fromMemberId)
+    .all<{
+      title: string;
+      kind: ActivityKind;
+      location: string;
+      note: string;
+      days_of_week: string;
+      start_minute: number;
+      duration_min: number;
+      effective_from: string;
+      effective_to: string | null;
+    }>();
+  if (results.length === 0) return 0;
+
+  await db.batch(
+    results.map((r) =>
+      db
+        .prepare(
+          `INSERT INTO activities
+             (id, household_id, member_id, title, kind, location, note, days_of_week,
+              start_minute, duration_min, effective_from, effective_to, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          newId(),
+          householdId,
+          toMemberId,
+          r.title,
+          r.kind,
+          r.location,
+          r.note,
+          r.days_of_week,
+          r.start_minute,
+          r.duration_min,
+          r.effective_from,
+          r.effective_to,
+          now,
+          now,
+        ),
+    ),
+  );
+  return results.length;
+}
+
 /* ------------------------------------------------------ ngoại lệ từng buổi */
 
 export interface ExceptionRow {

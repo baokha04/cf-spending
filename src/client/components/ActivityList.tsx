@@ -15,8 +15,12 @@ export interface ActivityListProps {
   membersById: Map<string, FamilyMember>;
   adding: boolean;
   editing: Activity | null;
+  /** Hoạt động đang được điền sẵn vào form để lưu thành bản mới. */
+  copying?: Activity | null;
   onAdd: () => void;
   onEdit: (activity: Activity) => void;
+  /** Có handler thì hiện nút sao chép, giống nút ở bảng giao dịch. */
+  onCopy?: (activity: Activity) => void;
   onCancelForm: () => void;
   onSubmit: (body: ActivityInput) => Promise<void>;
   onRemove: (activity: Activity) => Promise<void>;
@@ -39,8 +43,10 @@ export function ActivityList({
   membersById,
   adding,
   editing,
+  copying = null,
   onAdd,
   onEdit,
+  onCopy,
   onCancelForm,
   onSubmit,
   onRemove,
@@ -49,7 +55,7 @@ export function ActivityList({
   emptyText = 'Chưa khai hoạt động nào.',
   hideMember = false,
 }: ActivityListProps) {
-  const showForm = adding || editing !== null;
+  const showForm = adding || editing !== null || copying !== null;
   return (
     <section className="card">
       <div className="page-head" style={{ marginBottom: 12 }}>
@@ -67,13 +73,22 @@ export function ActivityList({
       </div>
 
       {showForm && (
-        <ActivityForm
-          key={editing?.id ?? 'new'}
-          members={members}
-          activity={editing}
-          onSubmit={onSubmit}
-          onCancel={onCancelForm}
-        />
+        <>
+          {copying && (
+            <p className="alert info">
+              Đã điền sẵn theo “{copying.title}”. Đổi lại giờ, thứ hoặc người rồi lưu thành hoạt
+              động mới. Bản gốc giữ nguyên.
+            </p>
+          )}
+          <ActivityForm
+            key={editing?.id ?? (copying ? `copy-${copying.id}` : 'new')}
+            members={members}
+            activity={editing}
+            copying={copying}
+            onSubmit={onSubmit}
+            onCancel={onCancelForm}
+          />
+        </>
       )}
 
       {activities.length === 0 ? (
@@ -119,6 +134,16 @@ export function ActivityList({
                   </div>
                 </div>
                 <div className="member-actions">
+                  {onCopy && (
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => onCopy(a)}
+                      title="Điền sẵn form theo hoạt động này để lưu thành hoạt động mới"
+                    >
+                      Sao chép
+                    </button>
+                  )}
                   <button type="button" className="ghost" onClick={() => onEdit(a)}>
                     Sửa
                   </button>

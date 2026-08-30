@@ -24,7 +24,30 @@ interface Draft {
   effectiveTo: string;
 }
 
-function toDraft(activity: Activity | null, defaultMemberId: string): Draft {
+function fromActivity(a: Activity, memberId: string, title: string): Draft {
+  return {
+    memberId,
+    title,
+    kind: a.kind,
+    location: a.location,
+    note: a.note,
+    daysOfWeek: a.daysOfWeek,
+    startTime: a.startTime,
+    endTime: a.endTime,
+    effectiveFrom: a.effectiveFrom,
+    effectiveTo: a.effectiveTo ?? '',
+  };
+}
+
+function toDraft(
+  activity: Activity | null,
+  copying: Activity | null,
+  defaultMemberId: string,
+): Draft {
+  // Bản sao giữ nguyên mọi thứ, chỉ gắn thêm '(bản sao)' vào tên để hai dòng
+  // trong danh sách không giống hệt nhau. Người nhận mặc định vẫn là người cũ —
+  // ô chọn nằm ngay đó nếu muốn chép sang người khác.
+  if (copying) return fromActivity(copying, copying.memberId, `${copying.title} (bản sao)`);
   if (!activity) {
     return {
       memberId: defaultMemberId,
@@ -39,31 +62,24 @@ function toDraft(activity: Activity | null, defaultMemberId: string): Draft {
       effectiveTo: '',
     };
   }
-  return {
-    memberId: activity.memberId,
-    title: activity.title,
-    kind: activity.kind,
-    location: activity.location,
-    note: activity.note,
-    daysOfWeek: activity.daysOfWeek,
-    startTime: activity.startTime,
-    endTime: activity.endTime,
-    effectiveFrom: activity.effectiveFrom,
-    effectiveTo: activity.effectiveTo ?? '',
-  };
+  return fromActivity(activity, activity.memberId, activity.title);
 }
 
 interface Props {
   members: FamilyMember[];
   /** null nghĩa là đang khai hoạt động mới. */
   activity: Activity | null;
+  /** Điền sẵn theo một hoạt động có sẵn rồi lưu thành hoạt động mới. */
+  copying?: Activity | null;
   onSubmit: (body: ActivityInput) => Promise<void>;
   onCancel: () => void;
 }
 
 /** Khai một khuôn mẫu lặp hàng tuần: ai, việc gì, những thứ nào, mấy giờ, từ ngày nào. */
-export function ActivityForm({ members, activity, onSubmit, onCancel }: Props) {
-  const [draft, setDraft] = useState<Draft>(() => toDraft(activity, members[0]?.id ?? ''));
+export function ActivityForm({ members, activity, copying = null, onSubmit, onCancel }: Props) {
+  const [draft, setDraft] = useState<Draft>(() =>
+    toDraft(activity, copying, members[0]?.id ?? ''),
+  );
   const [saving, setSaving] = useState(false);
 
   // Kết thúc sớm hơn bắt đầu là ca qua đêm — nói ra để người dùng khỏi tưởng nhập nhầm.
@@ -248,7 +264,7 @@ export function ActivityForm({ members, activity, onSubmit, onCancel }: Props) {
           className="primary"
           disabled={saving || sameTime || draft.daysOfWeek.length === 0 || !draft.memberId}
         >
-          {saving ? 'Đang lưu…' : activity ? 'Lưu' : 'Thêm hoạt động'}
+          {saving ? 'Đang lưu…' : activity ? 'Lưu' : copying ? 'Lưu bản sao' : 'Thêm hoạt động'}
         </button>
         <button type="button" onClick={onCancel} disabled={saving}>
           Huỷ
