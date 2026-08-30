@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type {
   Activity,
   ActivityKind,
@@ -17,15 +18,13 @@ import {
   monthLabel,
   shiftMonth,
   startOfWeekISO,
-  timeRangeLabel,
   todayISO,
   weekRangeLabel,
-  weekdayLabel,
 } from '../lib/format';
 import { memberColorVar } from '../lib/schedule';
 import { WeekGrid } from '../components/WeekGrid';
 import { MonthGrid } from '../components/MonthGrid';
-import { ActivityForm } from '../components/ActivityForm';
+import { ActivityList } from '../components/ActivityList';
 import { OccurrenceSheet } from '../components/OccurrenceSheet';
 
 type View = 'week' | 'month' | 'activities';
@@ -250,6 +249,11 @@ export function Schedule() {
                 ))}
               </select>
             </div>
+            {memberId && (
+              <Link className="navlink" to={`/lich/${memberId}`} style={{ alignSelf: 'flex-end' }}>
+                Mở lịch riêng →
+              </Link>
+            )}
             <div className="field" style={{ width: 150 }}>
               <label htmlFor="sc-kind">Loại</label>
               <select
@@ -268,9 +272,11 @@ export function Schedule() {
           </div>
 
           {legend.length > 0 && (
+            /* Legend kiêm luôn lối vào lịch riêng: chạm tên ai là mở màn hình
+               của người đó, khỏi phải vòng qua trang Hộ gia đình. */
             <div className="legend schedule-legend">
               {legend.map((m) => (
-                <span className="item" key={m.id}>
+                <Link className="item legend-link" key={m.id} to={`/lich/${m.id}`}>
                   <span
                     className="swatch"
                     style={{ background: memberColorVar(m.color) }}
@@ -278,7 +284,7 @@ export function Schedule() {
                   />
                   {m.icon ? `${m.icon} ` : ''}
                   {m.nickname || m.name}
-                </span>
+                </Link>
               ))}
             </div>
           )}
@@ -350,113 +356,5 @@ export function Schedule() {
         />
       )}
     </>
-  );
-}
-
-interface ListProps {
-  activities: Activity[];
-  members: FamilyMember[];
-  membersById: Map<string, FamilyMember>;
-  adding: boolean;
-  editing: Activity | null;
-  onAdd: () => void;
-  onEdit: (activity: Activity) => void;
-  onCancelForm: () => void;
-  onSubmit: (body: ActivityInput) => Promise<void>;
-  onRemove: (activity: Activity) => Promise<void>;
-}
-
-/** Tab "Hoạt động": khai và sửa khuôn mẫu lặp hàng tuần. */
-function ActivityList({
-  activities,
-  members,
-  membersById,
-  adding,
-  editing,
-  onAdd,
-  onEdit,
-  onCancelForm,
-  onSubmit,
-  onRemove,
-}: ListProps) {
-  const showForm = adding || editing !== null;
-  return (
-    <section className="card">
-      <div className="page-head" style={{ marginBottom: 12 }}>
-        <div>
-          <h2 className="card-title">Khuôn mẫu lặp hàng tuần</h2>
-          <p className="card-sub" style={{ marginBottom: 0 }}>
-            Khai một lần, lịch tự sinh buổi. Nghỉ hay dời từng buổi thì bấm vào buổi đó ở tab Tuần.
-          </p>
-        </div>
-        {!showForm && members.length > 0 && (
-          <button type="button" className="primary" onClick={onAdd}>
-            Thêm hoạt động
-          </button>
-        )}
-      </div>
-
-      {showForm && (
-        <ActivityForm
-          key={editing?.id ?? 'new'}
-          members={members}
-          activity={editing}
-          onSubmit={onSubmit}
-          onCancel={onCancelForm}
-        />
-      )}
-
-      {activities.length === 0 ? (
-        <p className="empty">Chưa khai hoạt động nào.</p>
-      ) : (
-        <ul className="activity-list">
-          {activities.map((a) => {
-            const member = membersById.get(a.memberId);
-            return (
-              <li className="activity-row" key={a.id}>
-                <span
-                  className="member-stripe"
-                  style={{ background: member ? memberColorVar(member.color) : 'var(--axis)' }}
-                  aria-hidden="true"
-                />
-                <div className="activity-body">
-                  <div className="activity-title">
-                    {a.title}
-                    <span className="pill">{ACTIVITY_KIND_LABEL[a.kind]}</span>
-                  </div>
-                  <div className="activity-meta">
-                    <span>{member?.name ?? '—'}</span>
-                    <span className="dot" aria-hidden="true">·</span>
-                    <span>{a.daysOfWeek.map(weekdayLabel).join(' ')}</span>
-                    <span className="dot" aria-hidden="true">·</span>
-                    <span>{timeRangeLabel(a.startTime, a.endTime, a.overnight)}</span>
-                    {a.location && (
-                      <>
-                        <span className="dot" aria-hidden="true">·</span>
-                        <span>{a.location}</span>
-                      </>
-                    )}
-                  </div>
-                  <div className="activity-meta">
-                    <span>
-                      Từ {fullDateLabel(a.effectiveFrom)}
-                      {a.effectiveTo ? ` đến ${fullDateLabel(a.effectiveTo)}` : ' — chưa có ngày kết thúc'}
-                    </span>
-                  </div>
-                </div>
-                <div className="member-actions">
-                  <button type="button" className="ghost" onClick={() => onEdit(a)}>
-                    Sửa
-                  </button>
-                  <button type="button" className="ghost danger" onClick={() => void onRemove(a)}>
-                    Xoá
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
   );
 }

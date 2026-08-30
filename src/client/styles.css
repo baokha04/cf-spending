@@ -769,6 +769,34 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
 
 .schedule-legend { margin-top: 12px; }
 
+/* Chuyển nhanh giữa các thành viên trên màn hình lịch riêng. */
+.member-switch { display: flex; gap: 8px; flex-wrap: wrap; }
+.member-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.85rem;
+}
+.member-chip.on { font-weight: 650; border-width: 2px; }
+.member-chip .swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+/* Thống kê tuần của một người. */
+.member-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.member-stats dt { font-size: 0.76rem; color: var(--text-muted); }
+.member-stats dd { margin: 2px 0 0; font-size: 1.05rem; font-weight: 650; }
+
+/* Legend của lịch cả nhà kiêm lối vào lịch riêng. */
+.legend-link { text-decoration: none; color: inherit; border-radius: 6px; padding: 2px 4px; }
+.legend-link:hover { background: var(--surface-2); }
+
 /* ------------------------------------------------------------ lưới tuần */
 
 /* Cột giờ dính bên trái khi cuộn ngang, hàng đầu dính khi cuộn dọc.
@@ -1079,6 +1107,9 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   .member-card { flex-direction: row; }
   .member-actions { flex-direction: column; }
   .sheet { max-height: 90vh; }
+  .member-switch { gap: 6px; }
+  .member-chip { flex: 1 1 auto; justify-content: center; min-height: 38px; }
+  .member-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* iPhone xoay ngang: chiều cao rất thấp, thanh tab ăn mất nội dung. */

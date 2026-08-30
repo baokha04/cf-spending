@@ -22,6 +22,7 @@ giao dịch.
 | Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
 | Lịch hoạt động | Lưới **tuần trục giờ** và lưới **tháng** cho lịch đi làm, đi dạy, đi học của từng người; mỗi thành viên một màu, chồng giờ nằm cạnh nhau. Nghỉ hoặc dời **từng buổi** mà không đụng tới khuôn mẫu lặp |
+| Lịch riêng | Màn hình của **một người**: tuần của họ, thống kê tuần đó (số buổi, tổng giờ, ngày bận nhất, giờ theo từng loại) và toàn bộ hoạt động đang khai cho họ. Vào từ tên người trên legend của lịch cả nhà, hoặc từ nút **Lịch riêng** ở trang Hộ gia đình |
 | Danh mục | Thêm, **sửa tên và biểu tượng** (chọn từ bảng icon có sẵn), lưu trữ hoặc xoá. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
 | Hộ gia đình | **Thành viên trong nhà** (kể cả trẻ nhỏ, ông bà không có tài khoản), tài khoản đăng nhập và mã mời |
