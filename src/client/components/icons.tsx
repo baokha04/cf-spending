@@ -8,6 +8,7 @@
  */
 
 export type ActionIconName =
+  | 'plus'
   | 'expand'
   | 'collapse'
   | 'copy'
@@ -17,6 +18,7 @@ export type ActionIconName =
   | 'restore';
 
 const PATHS: Record<ActionIconName, JSX.Element> = {
+  plus: <path d="M12 5v14M5 12h14" />,
   // Mũi nhọn xuống / lên: mở và đóng phần chi tiết của dòng.
   expand: <path d="m6 9 6 6 6-6" />,
   collapse: <path d="m6 15 6-6 6 6" />,

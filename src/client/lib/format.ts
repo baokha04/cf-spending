@@ -170,6 +170,39 @@ export function startOfWeekISO(date: string): string {
   return addDaysISO(date, 1 - weekdayOf(date));
 }
 
+/**
+ * Tuần theo ISO-8601: tuần 1 là tuần chứa ngày 4 tháng 1, và một tuần thuộc về
+ * năm chứa Thứ 5 của nó. Nhờ quy ước ấy mà 31/12/2026 nằm ở "tuần 53 của 2026"
+ * còn 01/01/2027 lại có thể vẫn là tuần đó chứ không nhảy về tuần 1.
+ */
+export function isoWeek(date: string): { week: number; year: number } {
+  const thursday = addDaysISO(startOfWeekISO(date), 3);
+  const year = Number(thursday.slice(0, 4));
+  const firstThursday = addDaysISO(startOfWeekISO(`${year}-01-04`), 3);
+  const days = Math.round(
+    (Date.parse(`${thursday}T00:00:00Z`) - Date.parse(`${firstThursday}T00:00:00Z`)) / 86_400_000,
+  );
+  return { week: days / 7 + 1, year };
+}
+
+/**
+ * Nhãn ngắn cho nút chuyển tuần: 'Tuần 36'.
+ * Kèm năm khi tuần đó khác năm với `reference` — nút "tuần sau" ở cuối tháng 12
+ * mà chỉ ghi "Tuần 1" thì không rõ là tuần 1 của năm nào.
+ */
+export function weekNumberLabel(date: string, reference?: string): string {
+  const { week, year } = isoWeek(date);
+  const refYear = reference ? isoWeek(reference).year : year;
+  return year === refYear ? `Tuần ${week}` : `Tuần ${week}/${year}`;
+}
+
+/** Nhãn ngắn cho nút chuyển tháng: 'Tháng 8', hoặc 'Tháng 12/2025' khi khác năm. */
+export function monthNumberLabel(month: string, reference?: string): string {
+  const [year, m] = month.split('-');
+  const refYear = reference ? reference.slice(0, 4) : year;
+  return year === refYear ? `Tháng ${Number(m)}` : `Tháng ${Number(m)}/${year}`;
+}
+
 /** '31/08 – 06/09/2026'; kèm cả năm ở đầu khi tuần vắt qua hai năm. */
 export function weekRangeLabel(from: string, to: string): string {
   const sameYear = from.slice(0, 4) === to.slice(0, 4);

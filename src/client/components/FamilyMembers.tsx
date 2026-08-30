@@ -9,6 +9,7 @@ import {
   fullDateLabel,
 } from '../lib/format';
 import { memberColorVar } from '../lib/schedule';
+import { ActionIcon } from './icons';
 import { IconPicker } from './IconPicker';
 
 /** Trạng thái của form thêm mới hoặc sửa tại chỗ. */
@@ -204,8 +205,14 @@ export function FamilyMembers({ accounts }: Props) {
           </p>
         </div>
         {!editing && (
-          <button type="button" className="primary" onClick={startAdd}>
-            Thêm người
+          <button
+            type="button"
+            className="primary icon-button"
+            onClick={startAdd}
+            aria-label="Thêm người"
+            title="Thêm người"
+          >
+            <ActionIcon name="plus" />
           </button>
         )}
       </div>

@@ -196,7 +196,7 @@ npm run build   # typecheck + build production
 Bộ test phủ sáu nhóm: xác thực và **cô lập dữ liệu giữa các hộ**, CRUD cùng kiểm tra
 dữ liệu đầu vào, độ chính xác của tổng hợp dashboard (gồm các mốc biên tháng, năm
 nhuận, và trường hợp tháng trước rỗng), chỉnh sửa danh mục (kể cả đổi tên trùng),
-phần chi tiết giao dịch cùng báo cáo khoản lớn, xoá mềm — khôi phục cùng việc giao
+phần chi tiết giao dịch cùng báo cáo khoản lớn, số tuần ISO ở các mốc biên năm, xoá mềm — khôi phục cùng việc giao
 dịch đã xoá không lọt vào bất kỳ số liệu tổng hợp nào, **ngày hết hạn** — thứ tự ngày,
 cộng tháng ở các mốc biên, và ranh giới của cửa sổ nhắc gia hạn — và **tách giao dịch**,
 gồm cả việc batch quay lui trọn vẹn khi ràng buộc `amount > 0` bị chạm.
@@ -281,11 +281,20 @@ hạn: con số trên huy hiệu phải trả lời đúng một câu "có bao n
 và thẻ "Cần gia hạn" dùng chung một lần gọi API qua `ExpiryProvider`, nên không bao giờ
 có chuyện chuông báo 3 mà thẻ chỉ liệt kê 2.
 
+**Điều hướng thời gian nói bằng số.** Nút chuyển tuần và chuyển tháng mang đúng con
+số mà nó dẫn tới — `Tuần 34 · Tuần 35 · Tuần 36`, `Tháng 7 · Tháng 9` — thay vì
+"trước / này / sau", và tiêu đề trang cũng ghi tuần đang xem. Số tuần theo ISO-8601
+(tuần 1 là tuần chứa ngày 4 tháng 1, một tuần thuộc về năm chứa Thứ 5 của nó), kèm năm
+khi khác năm để `Tuần 1` không mơ hồ. Nút giữa vẫn là đường về tuần (tháng) chứa hôm
+nay, và nó **ẩn đi khi trùng đúng nút lùi hoặc nút tiến**: hai nút cạnh nhau cùng ghi
+"Tuần 35" trông như lỗi, mà nút bên cạnh vốn đã làm đúng việc đó rồi.
+
 **Nút thao tác trên từng dòng chỉ còn biểu tượng.** Năm nút chữ (chi tiết, sao chép,
 tách, sửa, xoá) đẩy bảng giao dịch rộng hơn cả khung chứa nó, còn trên điện thoại thì
 chiếm gần trọn một thẻ. Đổi sang biểu tượng thì bảng vừa khung, hết cuộn ngang. Nhãn
 không mất đi mà chuyển vào `aria-label` (trình đọc màn hình) và `title` (rê chuột), và
-mỗi nút vẫn giữ đủ cỡ chạm 44pt trên điện thoại.
+mỗi nút vẫn giữ đủ cỡ chạm 44pt trên điện thoại. Các nút **thêm** (giao dịch, danh mục,
+hoạt động, người nhà) cũng vậy: chỉ còn dấu cộng.
 
 **Ô ngày rộng vừa đủ.** `input[type=date]` và `input[type=month]` giới hạn ở `12rem`
 thay vì kéo hết bề ngang: một ngày chỉ cần chỗ cho `dd/mm/yyyy` và nút lịch, ô dài suốt

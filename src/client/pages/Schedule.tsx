@@ -16,9 +16,11 @@ import {
   currentMonthISO,
   fullDateLabel,
   monthLabel,
+  monthNumberLabel,
   shiftMonth,
   startOfWeekISO,
   todayISO,
+  weekNumberLabel,
   weekRangeLabel,
 } from '../lib/format';
 import { memberColorVar } from '../lib/schedule';
@@ -45,6 +47,23 @@ export function Schedule() {
   const [view, setView] = useState<View>('week');
   const [weekStart, setWeekStart] = useState(() => startOfWeekISO(today));
   const [month, setMonth] = useState(currentMonthISO());
+
+  /*
+   * Nút chuyển tuần và chuyển tháng mang đúng con số mà nó dẫn tới.
+   *
+   * Nút giữa là đường về tuần (tháng) chứa hôm nay, và nó biến mất khi trùng
+   * đúng nút lùi hoặc nút tiến: hai nút cạnh nhau cùng ghi "Tuần 35" trông như
+   * lỗi, mà nút bên cạnh vốn đã làm đúng việc đó rồi.
+   */
+  const thisWeek = startOfWeekISO(today);
+  const prevWeek = addDaysISO(weekStart, -7);
+  const nextWeek = addDaysISO(weekStart, 7);
+  const showTodayWeek = thisWeek !== prevWeek && thisWeek !== nextWeek;
+
+  const thisMonth = currentMonthISO();
+  const prevMonth = shiftMonth(month, -1);
+  const nextMonth = shiftMonth(month, 1);
+  const showThisMonth = thisMonth !== prevMonth && thisMonth !== nextMonth;
   const [memberId, setMemberId] = useState('');
   const [kind, setKind] = useState<ActivityKind | ''>('');
 
@@ -180,10 +199,12 @@ export function Schedule() {
         <div>
           <h1>Lịch hoạt động</h1>
           <p style={{ margin: '2px 0 0', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+            {/* Nút chuyển đã nói số tuần, nên tiêu đề cũng phải nói đang xem tuần
+                mấy — không thì không đối chiếu được nút với cái đang nhìn. */}
             {view === 'month'
               ? monthLabel(month)
               : view === 'week'
-                ? weekRangeLabel(range.from, range.to)
+                ? `${weekNumberLabel(weekStart)} · ${weekRangeLabel(range.from, range.to)}`
                 : `${activities.length} hoạt động đang khai`}
           </p>
         </div>
@@ -215,28 +236,46 @@ export function Schedule() {
         <section className="card">
           <div className="toolbar" style={{ marginBottom: 0 }}>
             <div className="segmented">
+              {/* Nút mang đúng số tuần / số tháng mà nó dẫn tới, thay vì
+                  "trước / này / sau": nhìn là biết đang ở đâu và sẽ tới đâu, khỏi
+                  phải nhẩm. Nút giữa vẫn là đường về tuần (tháng) chứa hôm nay,
+                  và được đánh dấu khi đó chính là cái đang xem. */}
               {view === 'week' ? (
                 <>
-                  <button type="button" onClick={() => setWeekStart(addDaysISO(weekStart, -7))}>
-                    ← Tuần trước
+                  <button type="button" onClick={() => setWeekStart(prevWeek)}>
+                    {weekNumberLabel(prevWeek, weekStart)}
                   </button>
-                  <button type="button" onClick={() => setWeekStart(startOfWeekISO(today))}>
-                    Tuần này
-                  </button>
-                  <button type="button" onClick={() => setWeekStart(addDaysISO(weekStart, 7))}>
-                    Tuần sau →
+                  {showTodayWeek && (
+                    <button
+                      type="button"
+                      aria-pressed={weekStart === thisWeek}
+                      title="Về tuần chứa hôm nay"
+                      onClick={() => setWeekStart(thisWeek)}
+                    >
+                      {weekNumberLabel(today, weekStart)}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setWeekStart(nextWeek)}>
+                    {weekNumberLabel(nextWeek, weekStart)}
                   </button>
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => setMonth(shiftMonth(month, -1))}>
-                    ← Tháng trước
+                  <button type="button" onClick={() => setMonth(prevMonth)}>
+                    {monthNumberLabel(prevMonth, month)}
                   </button>
-                  <button type="button" onClick={() => setMonth(currentMonthISO())}>
-                    Tháng này
-                  </button>
-                  <button type="button" onClick={() => setMonth(shiftMonth(month, 1))}>
-                    Tháng sau →
+                  {showThisMonth && (
+                    <button
+                      type="button"
+                      aria-pressed={month === thisMonth}
+                      title="Về tháng này"
+                      onClick={() => setMonth(thisMonth)}
+                    >
+                      {monthNumberLabel(thisMonth, month)}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setMonth(nextMonth)}>
+                    {monthNumberLabel(nextMonth, month)}
                   </button>
                 </>
               )}

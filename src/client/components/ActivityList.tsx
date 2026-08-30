@@ -7,6 +7,7 @@ import {
   weekdayLabel,
 } from '../lib/format';
 import { memberColorVar } from '../lib/schedule';
+import { ActionIcon } from './icons';
 import { ActivityForm } from './ActivityForm';
 
 export interface ActivityListProps {
@@ -66,8 +67,14 @@ export function ActivityList({
           </p>
         </div>
         {!showForm && members.length > 0 && (
-          <button type="button" className="primary" onClick={onAdd}>
-            Thêm hoạt động
+          <button
+            type="button"
+            className="primary icon-button"
+            onClick={onAdd}
+            aria-label="Thêm hoạt động"
+            title="Thêm hoạt động"
+          >
+            <ActionIcon name="plus" />
           </button>
         )}
       </div>

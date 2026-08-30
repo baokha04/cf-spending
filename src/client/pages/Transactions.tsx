@@ -7,6 +7,7 @@ import { useExpiry } from '../lib/expiry-context';
 import { useCurrentUrl } from '../lib/navigation';
 import { currentMonthISO } from '../lib/format';
 import { ExpiryAlert } from '../components/ExpiryAlert';
+import { ActionIcon } from '../components/icons';
 import { TransactionTable } from '../components/TransactionTable';
 
 const PAGE_SIZE = 50;
@@ -147,8 +148,16 @@ export function Transactions() {
     <>
       <div className="page-head">
         <h1>Giao dịch</h1>
-        <Link className="button-link primary" to="/giao-dich/them" state={{ from: here }}>
-          + Thêm giao dịch
+        {/* Chỉ còn dấu cộng: nhãn chuyển vào aria-label và title, như các nút
+            thao tác trên từng dòng. */}
+        <Link
+          className="button-link primary icon-button"
+          to="/giao-dich/them"
+          state={{ from: here }}
+          aria-label="Thêm giao dịch"
+          title="Thêm giao dịch"
+        >
+          <ActionIcon name="plus" />
         </Link>
       </div>
 
