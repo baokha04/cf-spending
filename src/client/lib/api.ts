@@ -15,6 +15,7 @@ import type {
   PaymentMethod,
   ScheduleResponse,
   SearchResponse,
+  SplitTransactionResponse,
   Transaction,
   TransactionPage,
   Weekday,
@@ -71,6 +72,19 @@ export interface TransactionInput {
   /** null nghĩa là không có hạn; gửi null khi sửa để bỏ hạn đang có. */
   expiresOn: string | null;
   categoryId: string | null;
+}
+
+/**
+ * Phần cắt ra khi tách một khoản. Trường nào bỏ trống thì mảnh mới thừa kế của
+ * khoản gốc; chiều thu/chi, tính chất, ngày và hạn thì luôn thừa kế.
+ */
+export interface SplitInput {
+  amount: number | string;
+  note?: string;
+  detail?: string;
+  payee?: string;
+  paymentMethod?: PaymentMethod | null;
+  categoryId?: string | null;
 }
 
 export interface TransactionQuery {
@@ -168,6 +182,9 @@ export const api = {
   deleteTransaction: (id: string) =>
     request<{ deleted: boolean }>(`/transactions/${id}`, { method: 'DELETE' }),
   restoreTransaction: (id: string) => post<Transaction>(`/transactions/${id}/restore`),
+  /** Tách một khoản làm hai; trả về cả khoản gốc đã trừ tiền lẫn khoản mới. */
+  splitTransaction: (id: string, body: SplitInput) =>
+    post<SplitTransactionResponse>(`/transactions/${id}/split`, body),
 
   dashboard: (month: string) => request<DashboardSummary>(`/dashboard/summary?month=${month}`),
 

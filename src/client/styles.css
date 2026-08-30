@@ -199,6 +199,41 @@ a { color: var(--focus); }
   flex: none;
 }
 
+/* Chuông nhắc gia hạn. Kích thước bằng nút giao diện bên cạnh để hai biểu tượng
+   trên thanh trên cùng thẳng hàng; position: relative để treo huy hiệu vào góc. */
+.bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+.bell:hover { background: var(--surface-2); color: var(--text-primary); }
+/* Có khoản trễ thì chính cái chuông cũng đổi màu, không chỉ mỗi huy hiệu — nhìn
+   lướt qua là thấy, không cần đọc con số. */
+.bell.has-overdue { color: var(--critical); }
+
+.bell-badge {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--critical);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .navlink {
   padding: 6px 11px;
   border-radius: 8px;
@@ -585,6 +620,21 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
 .expiry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .expiry-actions button { min-height: 32px; padding: 4px 10px; font-size: 0.82rem; }
 .expiry-actions-label { font-size: 0.8rem; color: var(--text-secondary); }
+
+/* --------------------------------------------------------- tách giao dịch */
+
+/* Tóm tắt khoản gốc, đặt ngay đầu form tách: đang cắt từ đâu ra phải nhìn thấy
+   suốt lúc gõ số tiền, không phải nhớ lại từ bảng bên cạnh. */
+.split-source {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.split-source-head { display: flex; align-items: baseline; gap: 12px; }
+.split-source-note { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.split-source-head > :last-child { margin-left: auto; white-space: nowrap; }
 
 /* ------------------------------------------------------------ khoản lớn */
 
@@ -1106,6 +1156,8 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   /* Topbar trên 393pt chỉ còn tên app + nút này + Đăng xuất, nên nút phải đạt
      cỡ chạm mà vẫn không đẩy nút Đăng xuất xuống dòng. */
   .theme-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; }
+  .bell { width: var(--tap); height: var(--tap); }
+  .bell-badge { top: 5px; right: 4px; }
   .segmented { width: 100%; }
   .segmented button { flex: 1 1 0; }
 

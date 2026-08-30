@@ -1,5 +1,7 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth-context';
+import { ExpiryProvider } from './lib/expiry-context';
+import { ExpiryBell } from './components/ExpiryBell';
 import { useTheme } from './lib/theme';
 import { THEME_LABEL, nextMode } from '../shared/theme';
 import { Dashboard } from './pages/Dashboard';
@@ -171,6 +173,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <span className="who">
           {me?.user.displayName} · {me?.household.name}
         </span>
+        <ExpiryBell />
         <ThemeToggle />
         <button type="button" className="ghost" onClick={() => void logout()}>
           Đăng xuất
@@ -200,7 +203,13 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   if (loading) return <div className="auth-wrap">Đang tải…</div>;
   if (!me) return <Navigate to="/dang-nhap" replace state={{ from: location.pathname }} />;
-  return <Shell>{children}</Shell>;
+  // Provider nằm trong nhánh đã đăng nhập: khách chưa đăng nhập mà gọi API nhắc
+  // gia hạn thì chỉ tổ nhận 401.
+  return (
+    <ExpiryProvider>
+      <Shell>{children}</Shell>
+    </ExpiryProvider>
+  );
 }
 
 function GuestOnly({ children }: { children: React.ReactNode }) {

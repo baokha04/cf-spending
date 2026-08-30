@@ -12,10 +12,19 @@ interface Props {
   onEdit?: (tx: Transaction) => void;
   /** Có handler thì hiện nút sao chép để tạo nhanh một giao dịch giống hệt. */
   onCopy?: (tx: Transaction) => void;
+  /** Có handler thì hiện nút tách khoản này làm hai. */
+  onSplit?: (tx: Transaction) => void;
   compact?: boolean;
 }
 
-export function TransactionTable({ items, onChanged, onEdit, onCopy, compact = false }: Props) {
+export function TransactionTable({
+  items,
+  onChanged,
+  onEdit,
+  onCopy,
+  onSplit,
+  compact = false,
+}: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Mở chi tiết từng dòng, giữ theo id để danh sách tải thêm không làm mất chỗ đang mở.
@@ -126,6 +135,17 @@ export function TransactionTable({ items, onChanged, onEdit, onCopy, compact = f
             title="Điền sẵn form với nội dung của giao dịch này"
           >
             Sao chép
+          </button>
+        )}
+        {/* Tách được thì khoản đó phải chia ra được thành hai phần đều lớn hơn 0. */}
+        {onSplit && tx.amount > 1 && (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => onSplit(tx)}
+            title="Cắt một phần số tiền ra thành giao dịch riêng"
+          >
+            Tách
           </button>
         )}
         {onEdit && (

@@ -88,6 +88,14 @@ export interface ExpiringResponse {
   soon: ExpiringTransaction[];
 }
 
+/** Kết quả tách một khoản làm hai. */
+export interface SplitTransactionResponse {
+  /** Khoản gốc sau khi đã trừ đi phần tách ra; số tiền luôn còn lớn hơn 0. */
+  source: Transaction;
+  /** Khoản mới cắt ra từ khoản gốc, cùng chiều thu/chi và cùng ngày với nó. */
+  created: Transaction;
+}
+
 export interface TransactionPage {
   items: Transaction[];
   nextCursor: string | null;

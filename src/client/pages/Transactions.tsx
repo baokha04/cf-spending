@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Category, Transaction } from '../../shared/types';
 import { api } from '../lib/api';
 import type { TransactionQuery } from '../lib/api';
+import { useExpiry } from '../lib/expiry-context';
 import { currentMonthISO } from '../lib/format';
 import { ExpiryAlert } from '../components/ExpiryAlert';
+import { SplitTransactionForm } from '../components/SplitTransactionForm';
 import { TransactionForm } from '../components/TransactionForm';
 import { TransactionTable } from '../components/TransactionTable';
 
@@ -21,11 +23,13 @@ export function Transactions() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [copying, setCopying] = useState<Transaction | null>(null);
+  const [splitting, setSplitting] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Tăng lên mỗi lần danh sách đổi, để thẻ nhắc gia hạn tải lại theo.
-  const [changeCount, setChangeCount] = useState(0);
+  // Thêm hay xoá giao dịch có thể làm đổi danh sách cần gia hạn, nên bảo nguồn
+  // chung tải lại; lọc lại danh sách thì không cần — hạn có đổi gì đâu.
+  const { refresh: refreshExpiry } = useExpiry();
 
   const [month, setMonth] = useState(currentMonthISO());
   const [allMonths, setAllMonths] = useState(false);
@@ -62,14 +66,11 @@ export function Transactions() {
     }
   }, [buildQuery]);
 
-  /**
-   * Sau mỗi lần dữ liệu đổi: tải lại danh sách và bảo thẻ nhắc gia hạn tải theo.
-   * Lọc lại danh sách thì không cần — hạn của các khoản có đổi gì đâu.
-   */
+  /** Sau mỗi lần dữ liệu đổi: tải lại danh sách và cập nhật cả chuông lẫn thẻ nhắc. */
   const reload = useCallback(() => {
-    setChangeCount((n) => n + 1);
     void load();
-  }, [load]);
+    void refreshExpiry();
+  }, [load, refreshExpiry]);
 
   useEffect(() => {
     api
@@ -101,36 +102,56 @@ export function Transactions() {
         <h1>Giao dịch</h1>
       </div>
 
-      <ExpiryAlert reloadToken={changeCount} onChanged={() => void load()} />
+      <ExpiryAlert onChanged={() => void load()} />
 
       <div className="grid grid-form">
         <section className="card">
           <h2 className="card-title">
-            {editing ? 'Sửa giao dịch' : copying ? 'Sao chép giao dịch' : 'Thêm giao dịch'}
+            {splitting
+              ? 'Tách giao dịch'
+              : editing
+                ? 'Sửa giao dịch'
+                : copying
+                  ? 'Sao chép giao dịch'
+                  : 'Thêm giao dịch'}
           </h2>
           <p className="card-sub">
-            {copying
-              ? 'Đã điền sẵn theo giao dịch được chọn, ngày đổi thành hôm nay. Sửa lại rồi lưu thành giao dịch mới.'
-              : 'Ghi ngay khi vừa chi để không quên khoản nhỏ.'}
+            {splitting
+              ? 'Cắt một phần số tiền ra thành giao dịch riêng. Khoản gốc bị trừ đúng chừng ấy nên tổng thu chi không đổi.'
+              : copying
+                ? 'Đã điền sẵn theo giao dịch được chọn, ngày đổi thành hôm nay. Sửa lại rồi lưu thành giao dịch mới.'
+                : 'Ghi ngay khi vừa chi để không quên khoản nhỏ.'}
           </p>
-          <TransactionForm
-            categories={categories}
-            editing={editing}
-            copying={copying}
-            onSaved={() => {
-              setEditing(null);
-              setCopying(null);
-              reload();
-            }}
-            onCancel={
-              editing || copying
-                ? () => {
-                    setEditing(null);
-                    setCopying(null);
-                  }
-                : undefined
-            }
-          />
+          {splitting ? (
+            <SplitTransactionForm
+              source={splitting}
+              categories={categories}
+              onSplit={() => {
+                setSplitting(null);
+                reload();
+              }}
+              onCancel={() => setSplitting(null)}
+            />
+          ) : (
+            <TransactionForm
+              categories={categories}
+              editing={editing}
+              copying={copying}
+              onSaved={() => {
+                setEditing(null);
+                setCopying(null);
+                reload();
+              }}
+              onCancel={
+                editing || copying
+                  ? () => {
+                      setEditing(null);
+                      setCopying(null);
+                    }
+                  : undefined
+              }
+            />
+          )}
         </section>
 
         <section className="card">
@@ -219,11 +240,18 @@ export function Transactions() {
                 onChanged={reload}
                 onEdit={(tx) => {
                   setCopying(null);
+                  setSplitting(null);
                   setEditing(tx);
                 }}
                 onCopy={(tx) => {
                   setEditing(null);
+                  setSplitting(null);
                   setCopying(tx);
+                }}
+                onSplit={(tx) => {
+                  setEditing(null);
+                  setCopying(null);
+                  setSplitting(tx);
                 }}
               />
               {nextCursor && (
