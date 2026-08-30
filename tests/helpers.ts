@@ -52,6 +52,8 @@ interface TxOptions {
   recurrence?: 'monthly' | 'one_off';
   note?: string;
   categoryId?: string | null;
+  /** Ngày hết hạn; bỏ trống nghĩa là khoản không có hạn. */
+  expiresOn?: string | null;
 }
 
 export async function addTransaction(session: Session, opts: TxOptions): Promise<string> {
@@ -66,6 +68,7 @@ export async function addTransaction(session: Session, opts: TxOptions): Promise
         recurrence: opts.recurrence ?? 'one_off',
         note: opts.note ?? 'test',
         categoryId: opts.categoryId ?? null,
+        expiresOn: opts.expiresOn ?? null,
       }),
     },
     session.cookie,

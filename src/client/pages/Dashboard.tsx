@@ -6,6 +6,7 @@ import { currentMonthISO, money, monthLabel, shiftMonth } from '../lib/format';
 import { KpiCard } from '../components/KpiCard';
 import { CategoryChart, IncomeExpenseChart, PaceChart, RecurrenceChart } from '../components/charts';
 import { ChartCard } from '../components/viz';
+import { ExpiryAlert } from '../components/ExpiryAlert';
 import { TransactionTable } from '../components/TransactionTable';
 
 export function Dashboard() {
@@ -64,6 +65,10 @@ export function Dashboard() {
           />
         </div>
       </div>
+
+      {/* Nhắc gia hạn nằm trên cùng: đây là việc phải làm trong tuần này, khác
+          với phần còn lại của trang vốn chỉ là số liệu để xem. */}
+      <ExpiryAlert onChanged={() => void load(month)} />
 
       {error && <div className="alert error">{error}</div>}
       {loading && !data && <div className="card empty">Đang tải…</div>}

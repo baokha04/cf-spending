@@ -55,6 +55,11 @@ export interface Transaction {
   amount: number; // đồng, luôn dương
   direction: Direction;
   recurrence: Recurrence;
+  /**
+   * Ngày phải gia hạn hoặc làm lại khoản này ('YYYY-MM-DD'); null là không có
+   * hạn. Bảo hiểm, tiền thuê nhà, gói cước… — mốc để nhắc trước khi tới hạn.
+   */
+  expiresOn: string | null;
   categoryId: string | null;
   categoryName: string | null;
   createdBy: string;
@@ -63,6 +68,24 @@ export interface Transaction {
   updatedAt: number;
   /** Khác null nghĩa là đã xoá mềm: vẫn hiện trong danh sách nhưng không vào số liệu. */
   deletedAt: number | null;
+}
+
+/** Một khoản sắp tới hạn, kèm sẵn số ngày còn lại tính theo hôm nay của server. */
+export interface ExpiringTransaction {
+  transaction: Transaction;
+  /** Số ngày còn lại: 0 là hết hạn hôm nay, âm là đã quá hạn. */
+  daysLeft: number;
+}
+
+export interface ExpiringResponse {
+  /** Hôm nay theo giờ Việt Nam — mốc mà `daysLeft` đếm từ đó. */
+  today: string;
+  /** Cửa sổ nhắc, tính bằng ngày. */
+  days: number;
+  /** Đã quá hạn mà chưa gia hạn; cũ nhất đứng trước. */
+  overdue: ExpiringTransaction[];
+  /** Hết hạn từ hôm nay tới hết cửa sổ nhắc; gần nhất đứng trước. */
+  soon: ExpiringTransaction[];
 }
 
 export interface TransactionPage {

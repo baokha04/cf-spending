@@ -1,7 +1,8 @@
 import { Fragment, useState } from 'react';
 import type { Transaction } from '../../shared/types';
+import { daysUntil, needsRenewal } from '../../shared/expiry';
 import { api } from '../lib/api';
-import { RECURRENCE_LABEL, fullDateLabel, money } from '../lib/format';
+import { RECURRENCE_LABEL, expiryPillLabel, fullDateLabel, money, todayISO } from '../lib/format';
 import { useIsPhone } from '../lib/use-media-query';
 import { TransactionDetails, hasExtraInfo } from './TransactionDetails';
 
@@ -70,6 +71,22 @@ export function TransactionTable({ items, onChanged, onEdit, onCopy, compact = f
       {money(tx.amount)}
     </span>
   );
+
+  /**
+   * Pill hạn, chỉ hiện khi khoản đó đã quá hạn hoặc sắp hết hạn — hạn còn xa thì
+   * nằm trong phần chi tiết là đủ, đưa hết lên bảng thì cái gì cũng nhấn mạnh
+   * hoá ra không nhấn mạnh gì. Khoản đã xoá thì hạn không còn ý nghĩa.
+   */
+  const expiryPill = (tx: Transaction) => {
+    if (!tx.expiresOn || tx.deletedAt !== null) return null;
+    const daysLeft = daysUntil(todayISO(), tx.expiresOn);
+    if (!needsRenewal(daysLeft)) return null;
+    return (
+      <span className="pill warn" title={`Hết hạn ${fullDateLabel(tx.expiresOn)}`}>
+        {expiryPillLabel(daysLeft)}
+      </span>
+    );
+  };
 
   const detailsButton = (tx: Transaction) => (
     <button
@@ -145,6 +162,7 @@ export function TransactionTable({ items, onChanged, onEdit, onCopy, compact = f
                 <span className="dot" aria-hidden="true">·</span>
                 <span>{tx.categoryName ?? 'Chưa phân loại'}</span>
                 <span className="pill">{RECURRENCE_LABEL[tx.recurrence]}</span>
+                {expiryPill(tx)}
                 {tx.deletedAt !== null && <span className="pill warn">Đã xoá</span>}
                 {!compact && (
                   <>
@@ -191,6 +209,7 @@ export function TransactionTable({ items, onChanged, onEdit, onCopy, compact = f
                   </td>
                   <td className="col-tight">
                     <span className="pill">{RECURRENCE_LABEL[tx.recurrence]}</span>
+                    {expiryPill(tx)}
                     {tx.deletedAt !== null && <span className="pill warn">Đã xoá</span>}
                   </td>
                   {!compact && <td className="col-tight">{tx.createdByName}</td>}

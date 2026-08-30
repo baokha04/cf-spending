@@ -25,9 +25,11 @@ import {
   activityUpdateSchema,
   askSchema,
   categoryCreateSchema,
+  expiringQuerySchema,
   categoryUpdateSchema,
   familyMemberCreateSchema,
   familyMemberUpdateSchema,
+  EXPIRY_ORDER_MESSAGE,
   formatZodError,
   joinSchema,
   largeQuerySchema,
@@ -46,8 +48,10 @@ import {
   isoWeekday,
   monthEndExclusive,
   monthStart,
+  todayInVietnam,
 } from './dates';
 import { durationBetween, toMinutes } from '../shared/time';
+import { daysUntil } from '../shared/expiry';
 import { expandOccurrences } from './schedule';
 import { buildDashboardSummary } from './dashboard';
 import { deleteTransactionVector, embedTransactionById, upsertTransactionVectors } from './ai/embed';
@@ -846,6 +850,40 @@ app.get('/transactions/large', requireAuth, async (c) => {
   });
 });
 
+/**
+ * Nhắc gia hạn: các khoản đã quá hạn và các khoản hết hạn trong `days` ngày tới.
+ *
+ * Cũng phải đứng trước '/transactions/:id' để 'expiring' không bị hiểu là id.
+ * `today` lấy theo giờ Việt Nam chứ không theo đồng hồ của trình duyệt: hai máy
+ * trong nhà mở app cùng lúc phải thấy cùng một danh sách.
+ */
+app.get('/transactions/expiring', requireAuth, async (c) => {
+  const raw = Object.fromEntries(new URL(c.req.url).searchParams.entries());
+  const parsed = expiringQuerySchema.safeParse(raw);
+  if (!parsed.success) return c.json({ error: formatZodError(parsed.error) }, 400);
+
+  const { days, limit } = parsed.data;
+  const today = todayInVietnam();
+  const items = await db.listExpiringTransactions(
+    c.env.DB,
+    c.get('householdId'),
+    addDays(today, days),
+    limit,
+  );
+
+  // SQL đã lọc 'expires_on IS NOT NULL' nên mọi khoản ở đây chắc chắn có hạn.
+  const withDays = items.map((transaction) => ({
+    transaction,
+    daysLeft: daysUntil(today, transaction.expiresOn as string),
+  }));
+  return c.json({
+    today,
+    days,
+    overdue: withDays.filter((x) => x.daysLeft < 0),
+    soon: withDays.filter((x) => x.daysLeft >= 0),
+  });
+});
+
 app.get('/transactions/:id', requireAuth, async (c) => {
   const tx = await db.getTransaction(c.env.DB, c.get('householdId'), c.req.param('id'), true);
   if (!tx) return c.json({ error: 'Không tìm thấy giao dịch' }, 404);
@@ -877,6 +915,7 @@ app.post('/transactions', requireAuth, async (c) => {
     ...parsed.data,
     categoryId: parsed.data.categoryId ?? null,
     paymentMethod: parsed.data.paymentMethod ?? null,
+    expiresOn: parsed.data.expiresOn ?? null,
   };
 
   const categoryError = await validateCategory(c.env, householdId, input.categoryId, input.direction);
@@ -903,9 +942,21 @@ app.patch('/transactions/:id', requireAuth, async (c) => {
   const existing = await db.getTransaction(c.env.DB, householdId, id);
   if (!existing) return c.json({ error: 'Không tìm thấy giao dịch' }, 404);
 
-  const patch = { ...parsed.data, categoryId: parsed.data.categoryId ?? undefined };
+  const patch = {
+    ...parsed.data,
+    categoryId: parsed.data.categoryId ?? undefined,
+    expiresOn: parsed.data.expiresOn ?? undefined,
+  };
   // categoryId gửi lên null nghĩa là gỡ danh mục — phân biệt với không gửi trường này.
   if ('categoryId' in parsed.data && parsed.data.categoryId === null) patch.categoryId = null as never;
+  // expiresOn null cũng vậy: bỏ hạn, khác hẳn với việc không đụng tới hạn cũ.
+  if ('expiresOn' in parsed.data && parsed.data.expiresOn === null) patch.expiresOn = null as never;
+
+  // Thứ tự ngày phải đúng cả khi PATCH chỉ gửi một trong hai đầu: phần còn lại
+  // lấy từ bản ghi đang có, nên schema một mình không kiểm được.
+  const occurredOn = patch.occurredOn ?? existing.occurredOn;
+  const expiresOn = 'expiresOn' in parsed.data ? parsed.data.expiresOn : existing.expiresOn;
+  if (expiresOn && expiresOn < occurredOn) return c.json({ error: EXPIRY_ORDER_MESSAGE }, 400);
 
   const direction = patch.direction ?? existing.direction;
   const categoryError = await validateCategory(c.env, householdId, patch.categoryId, direction);

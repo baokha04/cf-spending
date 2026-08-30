@@ -35,6 +35,7 @@ export interface TransactionRow {
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
+  expires_on: string | null;
   category_id: string | null;
   category_name: string | null;
   created_by: string;
@@ -56,6 +57,7 @@ export function mapTransaction(row: TransactionRow): Transaction {
     amount: row.amount,
     direction: row.direction,
     recurrence: row.recurrence,
+    expiresOn: row.expires_on,
     categoryId: row.category_id,
     categoryName: row.category_name,
     createdBy: row.created_by,
@@ -68,7 +70,7 @@ export function mapTransaction(row: TransactionRow): Transaction {
 
 const TX_SELECT = `
   SELECT t.id, t.occurred_on, t.note, t.detail, t.payee, t.payment_method,
-         t.amount, t.direction, t.recurrence,
+         t.amount, t.direction, t.recurrence, t.expires_on,
          t.category_id, c.name AS category_name,
          t.created_by, u.display_name AS created_by_name,
          t.created_at, t.updated_at, t.deleted_at
@@ -486,6 +488,8 @@ export interface TransactionInput {
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
+  /** null nghĩa là khoản này không có hạn phải gia hạn. */
+  expiresOn: string | null;
   categoryId: string | null;
 }
 
@@ -502,8 +506,9 @@ export async function insertTransaction(
     .prepare(
       `INSERT INTO transactions
          (id, household_id, created_by, occurred_on, note, detail, payee, payment_method,
-          amount, direction, recurrence, category_id, embed_status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          amount, direction, recurrence, expires_on, category_id, embed_status,
+          created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       id,
@@ -517,6 +522,7 @@ export async function insertTransaction(
       input.amount,
       input.direction,
       input.recurrence,
+      input.expiresOn,
       input.categoryId,
       embedStatus,
       now,
@@ -545,6 +551,7 @@ export async function updateTransaction(
     amount: 'amount',
     direction: 'direction',
     recurrence: 'recurrence',
+    expiresOn: 'expires_on',
     categoryId: 'category_id',
   };
   for (const [key, column] of Object.entries(columns) as Array<[keyof TransactionInput, string]>) {
@@ -598,6 +605,31 @@ export async function softDeleteTransaction(
     .bind(now, now, householdId, id)
     .run();
   return (res.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Các khoản có hạn tới trước hoặc đúng ngày `through`, cũ nhất đứng trước.
+ *
+ * Không có cận dưới: một khoản đã quá hạn mà chưa gia hạn thì càng để lâu càng
+ * phải nhắc, chứ không phải im đi sau vài ngày. Vì thế danh sách có `limit` —
+ * nơi gọi chịu trách nhiệm về việc hiển thị khi số lượng chạm trần.
+ */
+export async function listExpiringTransactions(
+  db: D1Database,
+  householdId: string,
+  through: string,
+  limit: number,
+): Promise<Transaction[]> {
+  const { results } = await db
+    .prepare(
+      `${TX_SELECT}
+       WHERE t.household_id = ? AND t.deleted_at IS NULL
+         AND t.expires_on IS NOT NULL AND t.expires_on <= ?
+       ORDER BY t.expires_on ASC, t.id ASC LIMIT ?`,
+    )
+    .bind(householdId, through, limit)
+    .all<TransactionRow>();
+  return results.map(mapTransaction);
 }
 
 /* -------------------------------------------------------- khoản thu/chi lớn */
@@ -754,6 +786,7 @@ export interface PendingEmbedRow {
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
+  expires_on: string | null;
   category_name: string | null;
 }
 
@@ -765,7 +798,7 @@ export async function listPendingEmbeds(
   const { results } = await db
     .prepare(
       `SELECT t.id, t.household_id, t.occurred_on, t.note, t.detail, t.payee,
-              t.amount, t.direction, t.recurrence, c.name AS category_name
+              t.amount, t.direction, t.recurrence, t.expires_on, c.name AS category_name
        FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
        WHERE t.household_id = ? AND t.deleted_at IS NULL
          AND t.embed_status IN ('pending', 'error', 'skipped')

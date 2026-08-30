@@ -3,6 +3,7 @@ import type { Category, Transaction } from '../../shared/types';
 import { api } from '../lib/api';
 import type { TransactionQuery } from '../lib/api';
 import { currentMonthISO } from '../lib/format';
+import { ExpiryAlert } from '../components/ExpiryAlert';
 import { TransactionForm } from '../components/TransactionForm';
 import { TransactionTable } from '../components/TransactionTable';
 
@@ -22,6 +23,9 @@ export function Transactions() {
   const [copying, setCopying] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Tăng lên mỗi lần danh sách đổi, để thẻ nhắc gia hạn tải lại theo.
+  const [changeCount, setChangeCount] = useState(0);
 
   const [month, setMonth] = useState(currentMonthISO());
   const [allMonths, setAllMonths] = useState(false);
@@ -58,6 +62,15 @@ export function Transactions() {
     }
   }, [buildQuery]);
 
+  /**
+   * Sau mỗi lần dữ liệu đổi: tải lại danh sách và bảo thẻ nhắc gia hạn tải theo.
+   * Lọc lại danh sách thì không cần — hạn của các khoản có đổi gì đâu.
+   */
+  const reload = useCallback(() => {
+    setChangeCount((n) => n + 1);
+    void load();
+  }, [load]);
+
   useEffect(() => {
     api
       .categories()
@@ -88,6 +101,8 @@ export function Transactions() {
         <h1>Giao dịch</h1>
       </div>
 
+      <ExpiryAlert reloadToken={changeCount} onChanged={() => void load()} />
+
       <div className="grid grid-form">
         <section className="card">
           <h2 className="card-title">
@@ -105,7 +120,7 @@ export function Transactions() {
             onSaved={() => {
               setEditing(null);
               setCopying(null);
-              void load();
+              reload();
             }}
             onCancel={
               editing || copying
@@ -201,7 +216,7 @@ export function Transactions() {
             <>
               <TransactionTable
                 items={items}
-                onChanged={() => void load()}
+                onChanged={reload}
                 onEdit={(tx) => {
                   setCopying(null);
                   setEditing(tx);

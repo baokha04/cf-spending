@@ -110,6 +110,24 @@ export function shareLabel(part: number, total: number): string {
   return formatPercent((part / total) * 100);
 }
 
+/* ------------------------------------------------------- hạn và gia hạn */
+
+/**
+ * Nhãn ngắn cho pill hạn: 'Quá hạn 3 ngày', 'Hết hạn hôm nay', 'Còn 5 ngày'.
+ * Luôn có chữ, không chỉ có màu — pill đỏ mà không đọc được thì vô nghĩa với
+ * người mù màu.
+ */
+export function expiryPillLabel(daysLeft: number): string {
+  if (daysLeft < 0) return `Quá hạn ${-daysLeft} ngày`;
+  if (daysLeft === 0) return 'Hết hạn hôm nay';
+  return `Còn ${daysLeft} ngày`;
+}
+
+/** Câu đầy đủ cho phần chi tiết: 'Hết hạn 12/03/2027 · còn 5 ngày'. */
+export function expiryFullLabel(expiresOn: string, daysLeft: number): string {
+  return `${fullDateLabel(expiresOn)} · ${expiryPillLabel(daysLeft).toLowerCase()}`;
+}
+
 export const DIRECTION_LABEL = { income: 'Thu', expense: 'Chi' } as const;
 export const RECURRENCE_LABEL = { monthly: 'Hàng tháng', one_off: 'Phát sinh' } as const;
 

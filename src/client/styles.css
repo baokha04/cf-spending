@@ -543,6 +543,49 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
 .tx-card.deleted .tx-amount { text-decoration: line-through; color: var(--text-muted); }
 .tx-card.deleted .tx-meta > span:not(.pill) { text-decoration: line-through; }
 
+/* --------------------------------------------------------- hạn và gia hạn
+
+   Ô ngày hết hạn trong form nhập, và thẻ nhắc gia hạn ở đầu trang Tổng quan và
+   trang Giao dịch. Thẻ chỉ hiện khi thật sự có khoản cần làm gì đó, nên nó được
+   phép chiếm chỗ ở trên cùng.
+   ---------------------------------------------------------------------- */
+
+.field-hint { margin: 6px 0 0; font-size: 0.8rem; color: var(--text-secondary); }
+
+.expiry-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.expiry-presets button { min-height: 32px; padding: 4px 10px; font-size: 0.82rem; }
+
+/* Viền trái đậm: cùng ngôn ngữ với .large-item.missing — "chỗ này có việc". */
+.expiry-alert { border-left: 3px solid var(--critical); margin-bottom: 16px; }
+
+.expiry-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.expiry-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.expiry-row.overdue { border-color: var(--critical); }
+
+.expiry-main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.expiry-note { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+
+.expiry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+}
+.expiry-meta .dot { color: var(--text-muted); }
+
+.expiry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.expiry-actions button { min-height: 32px; padding: 4px 10px; font-size: 0.82rem; }
+.expiry-actions-label { font-size: 0.8rem; color: var(--text-secondary); }
+
 /* ------------------------------------------------------------ khoản lớn */
 
 .large-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
