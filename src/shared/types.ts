@@ -148,3 +148,93 @@ export interface AskResponse {
 export interface ApiError {
   error: string;
 }
+
+/* ==================================================== lịch hoạt động ===== */
+
+export type FamilyRelation = 'bo' | 'me' | 'con' | 'ong' | 'ba' | 'khac';
+/** Khoá màu, không phải mã hex — bảng màu nằm trong CSS nên sáng/tối mỗi bên một giá trị. */
+export type MemberColor = 'c1' | 'c2' | 'c3' | 'c4' | 'c5' | 'c6' | 'c7' | 'c8';
+export type ActivityKind = 'work' | 'teach' | 'study' | 'other';
+/** ISO-8601: 1 = Thứ 2 … 7 = Chủ nhật. */
+export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export interface FamilyMember {
+  id: string;
+  name: string;
+  nickname: string;
+  relation: FamilyRelation;
+  color: MemberColor;
+  icon: string | null;
+  birthDate: string | null; // YYYY-MM-DD
+  /** Tài khoản đăng nhập gắn với người này; null nghĩa là người không có tài khoản. */
+  userId: string | null;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+  /** Khác null nghĩa là đã xoá mềm: lịch của họ biến khỏi calendar nhưng khôi phục được. */
+  deletedAt: number | null;
+}
+
+/** Khuôn mẫu lặp hàng tuần, chưa phải buổi cụ thể. */
+export interface Activity {
+  id: string;
+  memberId: string;
+  memberName: string;
+  title: string;
+  kind: ActivityKind;
+  location: string;
+  note: string;
+  daysOfWeek: Weekday[];
+  startTime: string; // 'HH:MM'
+  endTime: string; // 'HH:MM'
+  durationMin: number;
+  /** Kết thúc rơi sang hôm sau. */
+  overnight: boolean;
+  effectiveFrom: string;
+  /** Bao gồm; null nghĩa là chưa có ngày kết thúc. */
+  effectiveTo: string | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+}
+
+/** Ngoại lệ của đúng một buổi: nghỉ hẳn, hoặc dời ngày/giờ. */
+export interface ActivityException {
+  id: string;
+  activityId: string;
+  /** Ngày của buổi gốc theo khuôn mẫu. */
+  occursOn: string;
+  status: 'cancelled' | 'moved';
+  newDate: string | null;
+  newStartTime: string | null;
+  newDurationMin: number | null;
+  note: string;
+}
+
+/** Một buổi cụ thể đã trải ra từ khuôn mẫu, đã áp ngoại lệ. */
+export interface Occurrence {
+  activityId: string;
+  memberId: string;
+  title: string;
+  kind: ActivityKind;
+  location: string;
+  /** Ngày buổi bắt đầu. Ca qua đêm kết thúc ở hôm sau. */
+  date: string;
+  startTime: string;
+  endTime: string;
+  startMinute: number;
+  durationMin: number;
+  overnight: boolean;
+  /** Ngày gốc theo khuôn mẫu — khoá để tạo hoặc xoá ngoại lệ đúng buổi này. */
+  sourceDate: string;
+  /** Buổi này đã bị một ngoại lệ dời giờ hoặc dời ngày. */
+  moved: boolean;
+}
+
+export interface ScheduleResponse {
+  from: string;
+  /** Bao gồm. */
+  to: string;
+  members: FamilyMember[];
+  occurrences: Occurrence[];
+}

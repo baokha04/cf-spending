@@ -17,19 +17,37 @@ import { csrfGuard, isSecure, requireAuth, requireOwner } from './middleware';
 import { newId, newInviteCode, normalizeInviteCode } from './ids';
 import * as db from './db/queries';
 import {
+  MAX_SCHEDULE_SPAN_DAYS,
+  activityCreateSchema,
+  activityKindParam,
+  activityExceptionSchema,
+  activityUpdateSchema,
   askSchema,
   categoryCreateSchema,
   categoryUpdateSchema,
+  familyMemberCreateSchema,
+  familyMemberUpdateSchema,
   formatZodError,
   joinSchema,
   largeQuerySchema,
   loginSchema,
   monthParam,
   registerSchema,
+  scheduleQuerySchema,
   transactionCreateSchema,
   transactionUpdateSchema,
 } from './validators';
-import { currentMonthInVietnam, isValidDate, monthEndExclusive, monthStart } from './dates';
+import {
+  addDays,
+  currentMonthInVietnam,
+  daysBetween,
+  isValidDate,
+  isoWeekday,
+  monthEndExclusive,
+  monthStart,
+} from './dates';
+import { durationBetween, toMinutes } from '../shared/time';
+import { expandOccurrences } from './schedule';
 import { buildDashboardSummary } from './dashboard';
 import { deleteTransactionVector, embedTransactionById, upsertTransactionVectors } from './ai/embed';
 import { semanticSearch } from './ai/search';
@@ -340,6 +358,401 @@ app.post('/categories/:id/restore', requireAuth, async (c) => {
   const ok = await db.restoreCategory(c.env.DB, householdId, id);
   if (!ok) return c.json({ error: 'Không tìm thấy danh mục đã xoá' }, 404);
   return c.json(await db.getCategory(c.env.DB, householdId, id));
+});
+
+/* ==================================================== thành viên trong nhà */
+
+/**
+ * Danh mục người trong nhà — tách hẳn khỏi `memberships` (tài khoản đăng nhập)
+ * để thêm được cả con nhỏ, ông bà. `userId` là cầu nối tuỳ chọn giữa hai bên.
+ */
+
+/**
+ * Tài khoản gắn vào phải thuộc cùng hộ và chưa gắn cho ai khác.
+ * Hai lỗi khác hạng: sai tài khoản là dữ liệu hỏng (400), còn tài khoản đã có
+ * chủ là tranh chấp với một hàng đang tồn tại (409).
+ */
+async function validateMemberUser(
+  env: Env,
+  householdId: string,
+  userId: string | null | undefined,
+  selfId?: string,
+): Promise<{ message: string; status: 400 | 409 } | null> {
+  if (!userId) return null;
+  if (!(await db.isHouseholdUser(env.DB, householdId, userId))) {
+    return { message: 'Tài khoản này không ở trong hộ gia đình', status: 400 };
+  }
+  const taken = await db.findFamilyMemberByUserId(env.DB, householdId, userId);
+  if (taken && taken.id !== selfId) {
+    return { message: 'Tài khoản này đã gắn với một thành viên khác', status: 409 };
+  }
+  return null;
+}
+
+/** Đọc lại nguyên nhân UNIQUE thay vì đoán từ chuỗi lỗi của SQLite. */
+async function memberConflictMessage(
+  env: Env,
+  householdId: string,
+  name: string,
+  userId: string | null,
+  selfId?: string,
+): Promise<string> {
+  const byName = await db.findFamilyMemberByName(env.DB, householdId, name);
+  if (byName && byName.id !== selfId) return 'Đã có thành viên tên này trong nhà';
+  if (userId) {
+    const byUser = await db.findFamilyMemberByUserId(env.DB, householdId, userId);
+    if (byUser && byUser.id !== selfId) return 'Tài khoản này đã gắn với một thành viên khác';
+  }
+  return 'Thành viên bị trùng với một người đã có';
+}
+
+app.get('/family-members', requireAuth, async (c) =>
+  c.json({
+    members: await db.listFamilyMembers(c.env.DB, c.get('householdId'), {
+      includeDeleted: c.req.query('includeDeleted') === '1',
+    }),
+  }),
+);
+
+app.post('/family-members', requireAuth, async (c) => {
+  const parsed = parseBody(familyMemberCreateSchema, await readJson(c));
+  if (!parsed.ok) return c.json({ error: parsed.message }, 400);
+  const householdId = c.get('householdId');
+  const input = {
+    name: parsed.data.name,
+    nickname: parsed.data.nickname,
+    relation: parsed.data.relation,
+    color: parsed.data.color,
+    icon: parsed.data.icon ?? null,
+    birthDate: parsed.data.birthDate ?? null,
+    userId: parsed.data.userId ?? null,
+    sortOrder: parsed.data.sortOrder,
+  };
+
+  const userError = await validateMemberUser(c.env, householdId, input.userId);
+  if (userError) return c.json({ error: userError.message }, userError.status);
+
+  let id: string;
+  try {
+    id = await db.insertFamilyMember(c.env.DB, householdId, input, Date.now());
+  } catch (err) {
+    if (!String(err).includes('UNIQUE')) throw err;
+    // Ràng buộc là partial index WHERE deleted_at IS NULL, nên chỗ bị chiếm chắc
+    // chắn là một người đang dùng — không có đường "khôi phục khi trùng" như
+    // /categories, cứ báo trùng là đúng.
+    return c.json(
+      { error: await memberConflictMessage(c.env, householdId, input.name, input.userId) },
+      409,
+    );
+  }
+  return c.json(await db.getFamilyMember(c.env.DB, householdId, id), 201);
+});
+
+app.patch('/family-members/:id', requireAuth, async (c) => {
+  const parsed = parseBody(familyMemberUpdateSchema, await readJson(c));
+  if (!parsed.ok) return c.json({ error: parsed.message }, 400);
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+
+  const patch = {
+    ...parsed.data,
+    // Gửi lên null nghĩa là gỡ; không gửi trường thì giữ nguyên.
+    icon: parsed.data.icon === undefined ? undefined : (parsed.data.icon ?? null),
+    birthDate: parsed.data.birthDate === undefined ? undefined : (parsed.data.birthDate ?? null),
+    userId: parsed.data.userId === undefined ? undefined : (parsed.data.userId ?? null),
+  };
+
+  const userError = await validateMemberUser(c.env, householdId, patch.userId, id);
+  if (userError) return c.json({ error: userError.message }, userError.status);
+
+  try {
+    const ok = await db.updateFamilyMember(c.env.DB, householdId, id, patch, Date.now());
+    if (!ok) return c.json({ error: 'Không tìm thấy thành viên' }, 404);
+  } catch (err) {
+    if (!String(err).includes('UNIQUE')) throw err;
+    return c.json(
+      {
+        error: await memberConflictMessage(
+          c.env,
+          householdId,
+          patch.name ?? '',
+          patch.userId ?? null,
+          id,
+        ),
+      },
+      409,
+    );
+  }
+  return c.json(await db.getFamilyMember(c.env.DB, householdId, id));
+});
+
+/**
+ * Xoá mềm. Hoạt động của người này ở nguyên chỗ cũ: truy vấn lịch lọc theo
+ * `family_members.deleted_at`, nên lịch của họ biến khỏi calendar rồi quay lại
+ * đầy đủ khi khôi phục. Trả về số hoạt động để giao diện nói rõ hậu quả.
+ */
+app.delete('/family-members/:id', requireAuth, async (c) => {
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+  const activities = await db.countActivitiesOfMember(c.env.DB, householdId, id);
+  const ok = await db.softDeleteFamilyMember(c.env.DB, householdId, id, Date.now());
+  if (!ok) return c.json({ error: 'Không tìm thấy thành viên' }, 404);
+  return c.json({ deleted: true, activities });
+});
+
+app.post('/family-members/:id/restore', requireAuth, async (c) => {
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+  const ok = await db.restoreFamilyMember(c.env.DB, householdId, id, Date.now());
+  if (!ok) return c.json({ error: 'Không tìm thấy thành viên đã xoá' }, 404);
+  return c.json(await db.getFamilyMember(c.env.DB, householdId, id));
+});
+
+/* ========================================================= lịch hoạt động */
+
+/** Thành viên phải thuộc cùng hộ và chưa bị xoá. */
+async function validateActivityMember(
+  env: Env,
+  householdId: string,
+  memberId: string,
+): Promise<string | null> {
+  const member = await db.getFamilyMember(env.DB, householdId, memberId, true);
+  if (!member) return 'Thành viên không tồn tại';
+  if (member.deletedAt !== null) return 'Thành viên đã bị xoá — khôi phục lại trước khi dùng';
+  return null;
+}
+
+app.get('/activities', requireAuth, async (c) => {
+  const kind = c.req.query('kind');
+  const parsedKind = kind === undefined ? undefined : activityKindParam.safeParse(kind);
+  if (parsedKind && !parsedKind.success) {
+    return c.json({ error: formatZodError(parsedKind.error) }, 400);
+  }
+  return c.json({
+    activities: await db.listActivities(c.env.DB, c.get('householdId'), {
+      memberId: c.req.query('memberId'),
+      kind: parsedKind?.data,
+      includeDeleted: c.req.query('includeDeleted') === '1',
+    }),
+  });
+});
+
+app.post('/activities', requireAuth, async (c) => {
+  const parsed = parseBody(activityCreateSchema, await readJson(c));
+  if (!parsed.ok) return c.json({ error: parsed.message }, 400);
+  const householdId = c.get('householdId');
+
+  const memberError = await validateActivityMember(c.env, householdId, parsed.data.memberId);
+  if (memberError) return c.json({ error: memberError }, 400);
+
+  const startMinute = toMinutes(parsed.data.startTime);
+  const durationMin = durationBetween(startMinute, toMinutes(parsed.data.endTime));
+  if (durationMin === null) return c.json({ error: 'Giờ kết thúc phải khác giờ bắt đầu' }, 400);
+
+  const id = await db.insertActivity(
+    c.env.DB,
+    householdId,
+    {
+      memberId: parsed.data.memberId,
+      title: parsed.data.title,
+      kind: parsed.data.kind,
+      location: parsed.data.location,
+      note: parsed.data.note,
+      daysOfWeek: parsed.data.daysOfWeek,
+      startMinute,
+      durationMin,
+      effectiveFrom: parsed.data.effectiveFrom,
+      effectiveTo: parsed.data.effectiveTo ?? null,
+    },
+    Date.now(),
+  );
+  return c.json(await db.getActivity(c.env.DB, householdId, id), 201);
+});
+
+app.patch('/activities/:id', requireAuth, async (c) => {
+  const parsed = parseBody(activityUpdateSchema, await readJson(c));
+  if (!parsed.ok) return c.json({ error: parsed.message }, 400);
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+
+  const existing = await db.getActivity(c.env.DB, householdId, id);
+  if (!existing) return c.json({ error: 'Không tìm thấy hoạt động' }, 404);
+
+  if (parsed.data.memberId !== undefined) {
+    const memberError = await validateActivityMember(c.env, householdId, parsed.data.memberId);
+    if (memberError) return c.json({ error: memberError }, 400);
+  }
+
+  // Khoảng hiệu lực mới phải nhất quán với phần không gửi lên lần này.
+  const effectiveFrom = parsed.data.effectiveFrom ?? existing.effectiveFrom;
+  const effectiveTo =
+    parsed.data.effectiveTo === undefined ? existing.effectiveTo : (parsed.data.effectiveTo ?? null);
+  if (effectiveTo && effectiveTo < effectiveFrom) {
+    return c.json({ error: 'Ngày kết thúc phải từ ngày bắt đầu trở đi' }, 400);
+  }
+
+  let startMinute: number | undefined;
+  let durationMin: number | undefined;
+  if (parsed.data.startTime !== undefined && parsed.data.endTime !== undefined) {
+    startMinute = toMinutes(parsed.data.startTime);
+    const computed = durationBetween(startMinute, toMinutes(parsed.data.endTime));
+    if (computed === null) return c.json({ error: 'Giờ kết thúc phải khác giờ bắt đầu' }, 400);
+    durationMin = computed;
+  }
+
+  const ok = await db.updateActivity(
+    c.env.DB,
+    householdId,
+    id,
+    {
+      memberId: parsed.data.memberId,
+      title: parsed.data.title,
+      kind: parsed.data.kind,
+      location: parsed.data.location,
+      note: parsed.data.note,
+      daysOfWeek: parsed.data.daysOfWeek,
+      startMinute,
+      durationMin,
+      effectiveFrom: parsed.data.effectiveFrom,
+      effectiveTo: parsed.data.effectiveTo === undefined ? undefined : effectiveTo,
+    },
+    Date.now(),
+  );
+  if (!ok) return c.json({ error: 'Không tìm thấy hoạt động' }, 404);
+  return c.json(await db.getActivity(c.env.DB, householdId, id));
+});
+
+app.delete('/activities/:id', requireAuth, async (c) => {
+  const ok = await db.softDeleteActivity(
+    c.env.DB,
+    c.get('householdId'),
+    c.req.param('id'),
+    Date.now(),
+  );
+  if (!ok) return c.json({ error: 'Không tìm thấy hoạt động' }, 404);
+  return c.json({ deleted: true });
+});
+
+app.post('/activities/:id/restore', requireAuth, async (c) => {
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+  const ok = await db.restoreActivity(c.env.DB, householdId, id, Date.now());
+  if (!ok) return c.json({ error: 'Không tìm thấy hoạt động đã xoá' }, 404);
+  return c.json(await db.getActivity(c.env.DB, householdId, id));
+});
+
+app.get('/activities/:id/exceptions', requireAuth, async (c) => {
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+  if (!(await db.getActivity(c.env.DB, householdId, id, true))) {
+    return c.json({ error: 'Không tìm thấy hoạt động' }, 404);
+  }
+  return c.json({ exceptions: await db.listExceptionsOfActivity(c.env.DB, householdId, id) });
+});
+
+/** Nghỉ hoặc dời đúng một buổi. Một buổi chỉ mang được một ngoại lệ. */
+app.post('/activities/:id/exceptions', requireAuth, async (c) => {
+  const parsed = parseBody(activityExceptionSchema, await readJson(c));
+  if (!parsed.ok) return c.json({ error: parsed.message }, 400);
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+
+  const activity = await db.getActivity(c.env.DB, householdId, id);
+  if (!activity) return c.json({ error: 'Không tìm thấy hoạt động' }, 404);
+
+  // Ngoại lệ phải trỏ vào một buổi có thật, nếu không nó nằm chết trong bảng.
+  const { occursOn } = parsed.data;
+  const weekday = isoWeekday(occursOn);
+  if (
+    !activity.daysOfWeek.includes(weekday as never) ||
+    occursOn < activity.effectiveFrom ||
+    (activity.effectiveTo !== null && occursOn > activity.effectiveTo)
+  ) {
+    return c.json({ error: 'Ngày này không có buổi nào của hoạt động' }, 400);
+  }
+
+  let newStartMinute: number | null = null;
+  let newDurationMin: number | null = null;
+  if (parsed.data.newStartTime && parsed.data.newEndTime) {
+    newStartMinute = toMinutes(parsed.data.newStartTime);
+    newDurationMin = durationBetween(newStartMinute, toMinutes(parsed.data.newEndTime));
+    if (newDurationMin === null) return c.json({ error: 'Giờ kết thúc phải khác giờ bắt đầu' }, 400);
+  }
+
+  try {
+    await db.insertException(
+      c.env.DB,
+      householdId,
+      {
+        activityId: id,
+        occursOn,
+        status: parsed.data.status,
+        newDate: parsed.data.newDate ?? null,
+        newStartMinute,
+        newDurationMin,
+        note: parsed.data.note,
+      },
+      Date.now(),
+    );
+  } catch (err) {
+    if (!String(err).includes('UNIQUE')) throw err;
+    return c.json({ error: 'Buổi này đã có ngoại lệ — xoá cái cũ trước' }, 409);
+  }
+  const exceptions = await db.listExceptionsOfActivity(c.env.DB, householdId, id);
+  return c.json(exceptions.find((e) => e.occursOn === occursOn)!, 201);
+});
+
+/** Xoá ngoại lệ là trả buổi về đúng khuôn mẫu. */
+app.delete('/activities/:id/exceptions/:occursOn', requireAuth, async (c) => {
+  const occursOn = c.req.param('occursOn');
+  if (!isValidDate(occursOn)) return c.json({ error: 'Ngày phải có dạng YYYY-MM-DD' }, 400);
+  const ok = await db.deleteException(
+    c.env.DB,
+    c.get('householdId'),
+    c.req.param('id'),
+    occursOn,
+  );
+  if (!ok) return c.json({ error: 'Không tìm thấy ngoại lệ' }, 404);
+  return c.json({ deleted: true });
+});
+
+/* ========================================================== lịch tổng hợp */
+
+/**
+ * Buổi cụ thể trong một khoảng ngày — một endpoint phục vụ cả lưới tuần (7 ngày)
+ * lẫn lưới tháng (42 ô). `to` là mốc bao gồm.
+ */
+app.get('/schedule', requireAuth, async (c) => {
+  const raw = Object.fromEntries(new URL(c.req.url).searchParams.entries());
+  const parsed = scheduleQuerySchema.safeParse(raw);
+  if (!parsed.success) return c.json({ error: formatZodError(parsed.error) }, 400);
+
+  const { from, to, memberId, kind } = parsed.data;
+  if (daysBetween(from, to) + 1 > MAX_SCHEDULE_SPAN_DAYS) {
+    return c.json({ error: `Khoảng ngày tối đa ${MAX_SCHEDULE_SPAN_DAYS} ngày` }, 400);
+  }
+  const toExclusive = addDays(to, 1);
+  const householdId = c.get('householdId');
+
+  const [members, activities, exceptions] = await Promise.all([
+    db.listFamilyMembers(c.env.DB, householdId),
+    db.listActivitiesInRange(c.env.DB, householdId, { from, toExclusive, memberId, kind }),
+    db.listExceptionsInRange(c.env.DB, householdId, { from, toExclusive }),
+  ]);
+
+  // Ngoại lệ phải phủ cả buổi bị dời ra ngoài khoảng, nếu không buổi gốc sẽ hiện
+  // lại như chưa hề bị dời. Nạp thêm theo đúng nhóm khuôn mẫu đang xét.
+  const ids = activities.map((a) => a.id);
+  const all = ids.length ? await db.listExceptionsForActivities(c.env.DB, householdId, ids) : [];
+  const merged = new Map(all.map((e) => [e.id, e]));
+  for (const e of exceptions) merged.set(e.id, e);
+
+  return c.json({
+    from,
+    to,
+    members,
+    occurrences: expandOccurrences(activities, [...merged.values()], from, toExclusive),
+  });
 });
 
 /* ============================================================= transactions */
