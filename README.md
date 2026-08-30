@@ -10,7 +10,8 @@ phí thường niên — thì ghi hạn vào giao dịch, app sẽ **nhắc gia 
 hạn** (kèm chuông đếm số khoản quá hạn trên thanh trên cùng) và gia hạn ngay tại chỗ
 chỉ bằng một nút. Một hoá đơn gộp nhiều thứ thì **tách** được làm hai khoản riêng mà
 tổng tiền không đổi. Dashboard so sánh trực tiếp tháng hiện tại với tháng trước, còn
-trang **Khoản lớn** gom các khoản thu/chi vượt ngưỡng để soi kỹ từng khoản. Nhiều tài
+trang **Khoản lớn** (không còn trong menu, vào bằng `/khoan-lon`) gom các khoản thu/chi
+vượt ngưỡng để soi kỹ từng khoản. Nhiều tài
 khoản có thể vào chung một hộ gia đình qua mã mời để thấy chung số liệu.
 
 Bên cạnh tiền, app còn giữ **lịch hoạt động của từng người trong nhà** — đi làm, đi
@@ -24,12 +25,15 @@ giao dịch.
 |---|---|
 | Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước, kèm thẻ **nhắc gia hạn** ở trên cùng |
 | Giao dịch | Danh sách có lọc và tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Nút **Thêm giao dịch**, cũng như sửa, sao chép và tách, đều mở **màn hình nhập riêng**. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
-| Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
+| Khoản lớn ¹ | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
 | Lịch hoạt động | Lưới **tuần trục giờ** và lưới **tháng** cho lịch đi làm, đi dạy, đi học của từng người; mỗi thành viên một màu, chồng giờ nằm cạnh nhau. Nghỉ hoặc dời **từng buổi** mà không đụng tới khuôn mẫu lặp. **Sao chép** một hoạt động để tạo nhanh cái gần giống, hoặc để đưa sang người khác |
 | Lịch riêng | Màn hình của **một người**: tuần của họ, thống kê tuần đó (số buổi, tổng giờ, ngày bận nhất, giờ theo từng loại), toàn bộ hoạt động đang khai cho họ, và nút **chép cả lịch sang người khác**. Vào từ tên người trên legend của lịch cả nhà, hoặc từ nút **Lịch riêng** ở trang Hộ gia đình |
 | Danh mục | Danh sách theo hai nhóm thu/chi, lưu trữ hoặc xoá tại chỗ; thêm và **sửa tên, biểu tượng** (chọn từ bảng icon có sẵn) ở màn hình nhập riêng. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
 | Hộ gia đình | **Thành viên trong nhà** (kể cả trẻ nhỏ, ông bà không có tài khoản), tài khoản đăng nhập và mã mời |
+
+¹ Đã bỏ khỏi menu và thanh tab; route `/khoan-lon` vẫn chạy nên vào thẳng địa chỉ
+thì trang vẫn mở như cũ.
 
 ## Công nghệ
 
@@ -276,6 +280,20 @@ Chuông trên thanh trên cùng đếm **riêng số khoản đã quá hạn**, 
 hạn: con số trên huy hiệu phải trả lời đúng một câu "có bao nhiêu thứ đang trễ". Chuông
 và thẻ "Cần gia hạn" dùng chung một lần gọi API qua `ExpiryProvider`, nên không bao giờ
 có chuyện chuông báo 3 mà thẻ chỉ liệt kê 2.
+
+**Nút thao tác trên từng dòng chỉ còn biểu tượng.** Năm nút chữ (chi tiết, sao chép,
+tách, sửa, xoá) đẩy bảng giao dịch rộng hơn cả khung chứa nó, còn trên điện thoại thì
+chiếm gần trọn một thẻ. Đổi sang biểu tượng thì bảng vừa khung, hết cuộn ngang. Nhãn
+không mất đi mà chuyển vào `aria-label` (trình đọc màn hình) và `title` (rê chuột), và
+mỗi nút vẫn giữ đủ cỡ chạm 44pt trên điện thoại.
+
+**Ô ngày rộng vừa đủ.** `input[type=date]` và `input[type=month]` giới hạn ở `12rem`
+thay vì kéo hết bề ngang: một ngày chỉ cần chỗ cho `dd/mm/yyyy` và nút lịch, ô dài suốt
+màn hình 402pt của iPhone 16 Pro vừa huếch vừa biến cả dải trống thành vùng chạm mở bộ
+chọn ngày. Kèm theo là mấy dòng riêng cho Safari trên iOS: nó không coi ô ngày như
+`<input type=text>` mà tự đặt bề rộng nội tại theo nội dung và canh giữa giá trị, nên
+trong cột hẹp ô bị đội rộng ra rồi tràn, chữ thì lệch hẳn so với các ô ngay trên. Bỏ
+`appearance` mặc định không làm mất bộ chọn ngày của hệ điều hành.
 
 **Danh sách và form là hai màn hình khác nhau.** Trang Giao dịch và trang Danh mục
 chỉ hiển thị danh sách; thêm, sửa, sao chép hay tách đều mở một màn hình riêng

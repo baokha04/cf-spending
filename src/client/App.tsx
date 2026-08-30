@@ -59,13 +59,6 @@ function TabIcon({ name }: { name: string }) {
           <circle cx="7.8" cy="8.2" r="1.2" />
         </svg>
       );
-    case 'large':
-      // Đường gấp có một đỉnh nhô cao — hình ảnh của khoản bất thường trong tháng.
-      return (
-        <svg {...common}>
-          <path d="M3 16h3l3.5-9 4 12 3-7h4.5" />
-        </svg>
-      );
     case 'schedule':
       // Khung lịch với hai móc treo và một đường kẻ ngang chia đầu bảng.
       return (
@@ -145,7 +138,6 @@ const NAV = [
   // shortLabel: nhãn cho thanh tab hẹp trên điện thoại (mỗi tab ~78pt).
   { to: '/', label: 'Tổng quan', shortLabel: 'Tổng quan', icon: 'overview', end: true },
   { to: '/giao-dich', label: 'Giao dịch', shortLabel: 'Giao dịch', icon: 'transactions' },
-  { to: '/khoan-lon', label: 'Khoản lớn', shortLabel: 'Khoản lớn', icon: 'large' },
   { to: '/lich', label: 'Lịch hoạt động', shortLabel: 'Lịch', icon: 'schedule' },
   { to: '/danh-muc', label: 'Danh mục', shortLabel: 'Danh mục', icon: 'categories' },
   { to: '/hoi-dap', label: 'Hỏi đáp', shortLabel: 'Hỏi đáp', icon: 'ask' },
