@@ -112,3 +112,77 @@ export function shareLabel(part: number, total: number): string {
 
 export const DIRECTION_LABEL = { income: 'Thu', expense: 'Chi' } as const;
 export const RECURRENCE_LABEL = { monthly: 'Hàng tháng', one_off: 'Phát sinh' } as const;
+
+/* ----------------------------------------------------- lịch hoạt động */
+
+const WEEKDAY_SHORT = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+const WEEKDAY_LONG = [
+  'Thứ 2',
+  'Thứ 3',
+  'Thứ 4',
+  'Thứ 5',
+  'Thứ 6',
+  'Thứ 7',
+  'Chủ nhật',
+];
+
+/** ISO-8601: 1 = Thứ 2 … 7 = Chủ nhật. */
+export function weekdayLabel(weekday: number): string {
+  return WEEKDAY_SHORT[weekday - 1] ?? '';
+}
+
+export function weekdayLongLabel(weekday: number): string {
+  return WEEKDAY_LONG[weekday - 1] ?? '';
+}
+
+/** Thứ của một ngày cụ thể. UTC để không lệch múi giờ như phần còn lại của app. */
+export function weekdayOf(date: string): number {
+  const [y, m, d] = date.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+export function addDaysISO(date: string, delta: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
+}
+
+/** Thứ 2 của tuần chứa ngày này. */
+export function startOfWeekISO(date: string): string {
+  return addDaysISO(date, 1 - weekdayOf(date));
+}
+
+/** '31/08 – 06/09/2026'; kèm cả năm ở đầu khi tuần vắt qua hai năm. */
+export function weekRangeLabel(from: string, to: string): string {
+  const sameYear = from.slice(0, 4) === to.slice(0, 4);
+  return `${sameYear ? dayLabel(from) : fullDateLabel(from)} – ${fullDateLabel(to)}`;
+}
+
+/** '18:00 – 20:00', ca qua đêm thêm dấu +1 cho khỏi nhầm. */
+export function timeRangeLabel(startTime: string, endTime: string, overnight: boolean): string {
+  return `${startTime} – ${endTime}${overnight ? ' (+1)' : ''}`;
+}
+
+export const ACTIVITY_KIND_LABEL = {
+  work: 'Đi làm',
+  teach: 'Đi dạy',
+  study: 'Đi học',
+  other: 'Khác',
+} as const;
+
+/** Thứ tự hiển thị trong ô chọn loại hoạt động. */
+export const ACTIVITY_KIND_ORDER = ['work', 'teach', 'study', 'other'] as const;
+
+export const FAMILY_RELATION_LABEL = {
+  bo: 'Bố',
+  me: 'Mẹ',
+  con: 'Con',
+  ong: 'Ông',
+  ba: 'Bà',
+  khac: 'Khác',
+} as const;
+
+export const FAMILY_RELATION_ORDER = ['bo', 'me', 'con', 'ong', 'ba', 'khac'] as const;
+
+/** Tám khoá màu thành viên; giá trị thật nằm trong styles.css cho từng nền sáng/tối. */
+export const MEMBER_COLOR_KEYS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'] as const;

@@ -73,3 +73,50 @@ export async function addTransaction(session: Session, opts: TxOptions): Promise
   if (res.status !== 201) throw new Error(`Tạo giao dịch thất bại: ${await res.text()}`);
   return ((await res.json()) as { id: string }).id;
 }
+
+interface MemberOptions {
+  name: string;
+  color?: string;
+  relation?: string;
+  nickname?: string;
+  userId?: string | null;
+  birthDate?: string | null;
+  icon?: string | null;
+  sortOrder?: number;
+}
+
+export async function addMember(session: Session, opts: MemberOptions): Promise<string> {
+  const res = await call(
+    '/api/family-members',
+    { method: 'POST', body: json({ color: 'c1', ...opts }) },
+    session.cookie,
+  );
+  if (res.status !== 201) throw new Error(`Tạo thành viên thất bại: ${await res.text()}`);
+  return ((await res.json()) as { id: string }).id;
+}
+
+interface ActivityOptions {
+  memberId: string;
+  title?: string;
+  kind?: 'work' | 'teach' | 'study' | 'other';
+  daysOfWeek: number[];
+  startTime: string;
+  endTime: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  location?: string;
+  note?: string;
+}
+
+export async function addActivity(session: Session, opts: ActivityOptions): Promise<string> {
+  const res = await call(
+    '/api/activities',
+    {
+      method: 'POST',
+      body: json({ title: 'Hoạt động', kind: 'work', ...opts }),
+    },
+    session.cookie,
+  );
+  if (res.status !== 201) throw new Error(`Tạo hoạt động thất bại: ${await res.text()}`);
+  return ((await res.json()) as { id: string }).id;
+}

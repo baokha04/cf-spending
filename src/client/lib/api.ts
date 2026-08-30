@@ -1,14 +1,22 @@
 import type {
+  Activity,
+  ActivityException,
+  ActivityKind,
   AskResponse,
   Category,
   DashboardSummary,
+  FamilyMember,
+  FamilyRelation,
   LargeTransactionsResponse,
   MeResponse,
   Member,
+  MemberColor,
   PaymentMethod,
+  ScheduleResponse,
   SearchResponse,
   Transaction,
   TransactionPage,
+  Weekday,
 } from '../../shared/types';
 
 export class ApiError extends Error {
@@ -75,6 +83,41 @@ export interface TransactionQuery {
   cursor?: string;
 }
 
+export interface FamilyMemberInput {
+  name: string;
+  nickname?: string;
+  relation?: FamilyRelation;
+  color: MemberColor;
+  icon?: string | null;
+  birthDate?: string | null;
+  /** Tài khoản đăng nhập gắn với người này; null cho người không có tài khoản. */
+  userId?: string | null;
+  sortOrder?: number;
+}
+
+export interface ActivityInput {
+  memberId: string;
+  title: string;
+  kind: ActivityKind;
+  location?: string;
+  note?: string;
+  daysOfWeek: Weekday[];
+  /** 'HH:MM'. Kết thúc sớm hơn bắt đầu nghĩa là ca qua đêm. */
+  startTime: string;
+  endTime: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+}
+
+export interface ExceptionInput {
+  occursOn: string;
+  status: 'cancelled' | 'moved';
+  newDate?: string | null;
+  newStartTime?: string | null;
+  newEndTime?: string | null;
+  note?: string;
+}
+
 export const api = {
   register: (body: {
     email: string;
@@ -121,6 +164,46 @@ export const api = {
   restoreTransaction: (id: string) => post<Transaction>(`/transactions/${id}/restore`),
 
   dashboard: (month: string) => request<DashboardSummary>(`/dashboard/summary?month=${month}`),
+
+  familyMembers: (options: { includeDeleted?: boolean } = {}) =>
+    request<{ members: FamilyMember[] }>(
+      `/family-members${query({ includeDeleted: options.includeDeleted ? '1' : undefined })}`,
+    ),
+  createFamilyMember: (body: FamilyMemberInput) => post<FamilyMember>('/family-members', body),
+  updateFamilyMember: (id: string, body: Partial<FamilyMemberInput>) =>
+    request<FamilyMember>(`/family-members/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  /** `activities` là số hoạt động của người này — để nói rõ hậu quả của việc xoá. */
+  deleteFamilyMember: (id: string) =>
+    request<{ deleted: boolean; activities: number }>(`/family-members/${id}`, { method: 'DELETE' }),
+  restoreFamilyMember: (id: string) => post<FamilyMember>(`/family-members/${id}/restore`),
+
+  activities: (options: { memberId?: string; kind?: ActivityKind; includeDeleted?: boolean } = {}) =>
+    request<{ activities: Activity[] }>(
+      `/activities${query({
+        memberId: options.memberId,
+        kind: options.kind,
+        includeDeleted: options.includeDeleted ? '1' : undefined,
+      })}`,
+    ),
+  createActivity: (body: ActivityInput) => post<Activity>('/activities', body),
+  updateActivity: (id: string, body: Partial<ActivityInput>) =>
+    request<Activity>(`/activities/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteActivity: (id: string) =>
+    request<{ deleted: boolean }>(`/activities/${id}`, { method: 'DELETE' }),
+  restoreActivity: (id: string) => post<Activity>(`/activities/${id}/restore`),
+
+  exceptions: (activityId: string) =>
+    request<{ exceptions: ActivityException[] }>(`/activities/${activityId}/exceptions`),
+  addException: (activityId: string, body: ExceptionInput) =>
+    post<ActivityException>(`/activities/${activityId}/exceptions`, body),
+  removeException: (activityId: string, occursOn: string) =>
+    request<{ deleted: boolean }>(`/activities/${activityId}/exceptions/${occursOn}`, {
+      method: 'DELETE',
+    }),
+
+  /** Một endpoint cho cả lưới tuần lẫn lưới tháng; `to` là mốc bao gồm. */
+  schedule: (q: { from: string; to: string; memberId?: string; kind?: ActivityKind }) =>
+    request<ScheduleResponse>(`/schedule${query({ ...q })}`),
 
   search: (q: string) => request<SearchResponse>(`/search?q=${encodeURIComponent(q)}`),
   ask: (question: string) => post<AskResponse>('/ask', { question }),

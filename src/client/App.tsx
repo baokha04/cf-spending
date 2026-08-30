@@ -1,9 +1,12 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth-context';
+import { useTheme } from './lib/theme';
+import { THEME_LABEL, nextMode } from '../shared/theme';
 import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
 import { LargeTransactions } from './pages/LargeTransactions';
 import { Categories } from './pages/Categories';
+import { Schedule } from './pages/Schedule';
 import { Household } from './pages/Household';
 import { Ask } from './pages/Ask';
 import { Login } from './pages/Login';
@@ -58,6 +61,16 @@ function TabIcon({ name }: { name: string }) {
           <path d="M3 16h3l3.5-9 4 12 3-7h4.5" />
         </svg>
       );
+    case 'schedule':
+      // Khung lịch với hai móc treo và một đường kẻ ngang chia đầu bảng.
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="16" rx="2.5" />
+          <path d="M3 10h18" />
+          <path d="M8 3v4M16 3v4" />
+          <path d="M7.5 14h3M13.5 14h3M7.5 17.5h3" />
+        </svg>
+      );
     case 'ask':
       return (
         <svg {...common}>
@@ -78,11 +91,57 @@ function TabIcon({ name }: { name: string }) {
   }
 }
 
+/**
+ * Nút xoay vòng giao diện: Theo máy → Sáng → Tối → Theo máy.
+ *
+ * Ba trạng thái chứ không phải hai, vì "theo máy" là hành vi mặc định xưa nay —
+ * nút hai trạng thái sẽ khoá mất đường quay về nó. Chỉ có một biểu tượng nên
+ * nhãn nằm ở aria-label/title, và nói luôn bấm nữa thì sang chế độ gì.
+ */
+function ThemeToggle() {
+  const { mode, cycle } = useTheme();
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+  const icon =
+    mode === 'light' ? (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+      </svg>
+    ) : mode === 'dark' ? (
+      <svg {...common}>
+        <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />
+      </svg>
+    ) : (
+      <svg {...common}>
+        <rect x="2.5" y="4" width="19" height="12.5" rx="2" />
+        <path d="M8.5 20.5h7M12 16.5v4" />
+      </svg>
+    );
+
+  const label = `Giao diện: ${THEME_LABEL[mode]}. Bấm để chuyển sang ${THEME_LABEL[nextMode(mode)]}.`;
+  return (
+    <button type="button" className="ghost theme-toggle" onClick={cycle} aria-label={label} title={label}>
+      {icon}
+    </button>
+  );
+}
+
 const NAV = [
   // shortLabel: nhãn cho thanh tab hẹp trên điện thoại (mỗi tab ~78pt).
   { to: '/', label: 'Tổng quan', shortLabel: 'Tổng quan', icon: 'overview', end: true },
   { to: '/giao-dich', label: 'Giao dịch', shortLabel: 'Giao dịch', icon: 'transactions' },
   { to: '/khoan-lon', label: 'Khoản lớn', shortLabel: 'Khoản lớn', icon: 'large' },
+  { to: '/lich', label: 'Lịch hoạt động', shortLabel: 'Lịch', icon: 'schedule' },
   { to: '/danh-muc', label: 'Danh mục', shortLabel: 'Danh mục', icon: 'categories' },
   { to: '/hoi-dap', label: 'Hỏi đáp', shortLabel: 'Hỏi đáp', icon: 'ask' },
   { to: '/ho-gia-dinh', label: 'Hộ gia đình', shortLabel: 'Gia đình', icon: 'household' },
@@ -111,6 +170,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <span className="who">
           {me?.user.displayName} · {me?.household.name}
         </span>
+        <ThemeToggle />
         <button type="button" className="ghost" onClick={() => void logout()}>
           Đăng xuất
         </button>
@@ -158,6 +218,7 @@ export function App() {
         <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
         <Route path="/giao-dich" element={<RequireAuth><Transactions /></RequireAuth>} />
         <Route path="/khoan-lon" element={<RequireAuth><LargeTransactions /></RequireAuth>} />
+        <Route path="/lich" element={<RequireAuth><Schedule /></RequireAuth>} />
         <Route path="/danh-muc" element={<RequireAuth><Categories /></RequireAuth>} />
         <Route path="/hoi-dap" element={<RequireAuth><Ask /></RequireAuth>} />
         <Route path="/ho-gia-dinh" element={<RequireAuth><Household /></RequireAuth>} />

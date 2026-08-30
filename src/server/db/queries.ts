@@ -6,16 +6,24 @@
  * có đường nào đọc được giao dịch mà bỏ qua điều kiện này.
  */
 import type {
+  Activity,
+  ActivityException,
+  ActivityKind,
   Category,
   Direction,
+  FamilyMember,
+  FamilyRelation,
   LargeTransactionGroup,
+  MemberColor,
   MemberRole,
   PaymentMethod,
   Recurrence,
   Transaction,
   Member,
+  Weekday,
 } from '../../shared/types';
 import { newId } from '../ids';
+import { isOvernight, toTimeLabel } from '../../shared/time';
 
 export interface TransactionRow {
   id: string;
@@ -817,4 +825,653 @@ export async function bumpLoginAttempt(
 
 export async function clearLoginAttempt(db: D1Database, key: string): Promise<void> {
   await db.prepare('DELETE FROM login_attempts WHERE key = ?').bind(key).run();
+}
+
+/* -------------------------------------------------- thành viên trong nhà */
+
+const MEMBER_COLUMNS = `id, user_id, name, nickname, relation, color, icon, birth_date,
+  sort_order, created_at, updated_at, deleted_at`;
+
+interface FamilyMemberRow {
+  id: string;
+  user_id: string | null;
+  name: string;
+  nickname: string;
+  relation: FamilyRelation;
+  color: MemberColor;
+  icon: string | null;
+  birth_date: string | null;
+  sort_order: number;
+  created_at: number;
+  updated_at: number;
+  deleted_at: number | null;
+}
+
+function mapFamilyMember(row: FamilyMemberRow): FamilyMember {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    nickname: row.nickname,
+    relation: row.relation,
+    color: row.color,
+    icon: row.icon,
+    birthDate: row.birth_date,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+export async function listFamilyMembers(
+  db: D1Database,
+  householdId: string,
+  options: { includeDeleted?: boolean } = {},
+): Promise<FamilyMember[]> {
+  const where = ['household_id = ?'];
+  if (!options.includeDeleted) where.push('deleted_at IS NULL');
+  const { results } = await db
+    .prepare(
+      `SELECT ${MEMBER_COLUMNS} FROM family_members WHERE ${where.join(' AND ')}
+       ORDER BY sort_order, name`,
+    )
+    .bind(householdId)
+    .all<FamilyMemberRow>();
+  return results.map(mapFamilyMember);
+}
+
+export async function getFamilyMember(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  includeDeleted = false,
+): Promise<FamilyMember | null> {
+  const row = await db
+    .prepare(
+      `SELECT ${MEMBER_COLUMNS} FROM family_members WHERE household_id = ? AND id = ?${
+        includeDeleted ? '' : ' AND deleted_at IS NULL'
+      }`,
+    )
+    .bind(householdId, id)
+    .first<FamilyMemberRow>();
+  return row ? mapFamilyMember(row) : null;
+}
+
+export interface FamilyMemberInput {
+  name: string;
+  nickname: string;
+  relation: FamilyRelation;
+  color: MemberColor;
+  icon: string | null;
+  birthDate: string | null;
+  userId: string | null;
+  sortOrder: number;
+}
+
+export async function insertFamilyMember(
+  db: D1Database,
+  householdId: string,
+  input: FamilyMemberInput,
+  now: number,
+): Promise<string> {
+  const id = newId();
+  await db
+    .prepare(
+      `INSERT INTO family_members
+         (id, household_id, user_id, name, nickname, relation, color, icon, birth_date,
+          sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      id,
+      householdId,
+      input.userId,
+      input.name,
+      input.nickname,
+      input.relation,
+      input.color,
+      input.icon,
+      input.birthDate,
+      input.sortOrder,
+      now,
+      now,
+    )
+    .run();
+  return id;
+}
+
+export async function updateFamilyMember(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  patch: Partial<FamilyMemberInput>,
+  now: number,
+): Promise<boolean> {
+  const columns: Record<keyof FamilyMemberInput, string> = {
+    name: 'name',
+    nickname: 'nickname',
+    relation: 'relation',
+    color: 'color',
+    icon: 'icon',
+    birthDate: 'birth_date',
+    userId: 'user_id',
+    sortOrder: 'sort_order',
+  };
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  for (const [key, column] of Object.entries(columns) as Array<[keyof FamilyMemberInput, string]>) {
+    const value = patch[key];
+    if (value === undefined) continue;
+    sets.push(`${column} = ?`);
+    binds.push(value);
+  }
+  if (sets.length === 0) return true;
+  sets.push('updated_at = ?');
+  binds.push(now, householdId, id);
+  const res = await db
+    .prepare(
+      `UPDATE family_members SET ${sets.join(', ')}
+       WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
+    )
+    .bind(...binds)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/** Số hoạt động đang gắn với người này — để nói rõ hậu quả trước khi xoá. */
+export async function countActivitiesOfMember(
+  db: D1Database,
+  householdId: string,
+  memberId: string,
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT count(*) AS n FROM activities
+       WHERE household_id = ? AND member_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(householdId, memberId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/**
+ * Xoá mềm. Hoạt động của người này giữ nguyên: truy vấn lịch join sang bảng này
+ * và lọc deleted_at IS NULL, nên lịch của họ biến khỏi calendar rồi quay lại
+ * nguyên vẹn khi khôi phục.
+ */
+export async function softDeleteFamilyMember(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  now: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE family_members SET deleted_at = ?, updated_at = ?
+       WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
+    )
+    .bind(now, now, householdId, id)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+export async function restoreFamilyMember(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  now: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE family_members SET deleted_at = NULL, updated_at = ?
+       WHERE household_id = ? AND id = ? AND deleted_at IS NOT NULL`,
+    )
+    .bind(now, householdId, id)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Tra theo tên — đúng khoá của idx_member_name. Dùng trên nhánh lỗi UNIQUE để
+ * nói được chính xác cái gì trùng, thay vì đoán từ chuỗi lỗi của SQLite.
+ */
+export async function findFamilyMemberByName(
+  db: D1Database,
+  householdId: string,
+  name: string,
+): Promise<FamilyMember | null> {
+  const row = await db
+    .prepare(
+      `SELECT ${MEMBER_COLUMNS} FROM family_members
+       WHERE household_id = ? AND name = ? AND deleted_at IS NULL`,
+    )
+    .bind(householdId, name)
+    .first<FamilyMemberRow>();
+  return row ? mapFamilyMember(row) : null;
+}
+
+export async function findFamilyMemberByUserId(
+  db: D1Database,
+  householdId: string,
+  userId: string,
+): Promise<FamilyMember | null> {
+  const row = await db
+    .prepare(
+      `SELECT ${MEMBER_COLUMNS} FROM family_members
+       WHERE household_id = ? AND user_id = ? AND deleted_at IS NULL`,
+    )
+    .bind(householdId, userId)
+    .first<FamilyMemberRow>();
+  return row ? mapFamilyMember(row) : null;
+}
+
+/** Người này có phải thành viên của hộ (theo bảng memberships) không. */
+export async function isHouseholdUser(
+  db: D1Database,
+  householdId: string,
+  userId: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare('SELECT 1 AS ok FROM memberships WHERE household_id = ? AND user_id = ?')
+    .bind(householdId, userId)
+    .first<{ ok: number }>();
+  return row !== null;
+}
+
+/* ------------------------------------------------------- lịch hoạt động */
+
+const ACTIVITY_COLUMNS = `a.id, a.member_id, a.title, a.kind, a.location, a.note,
+  a.days_of_week, a.start_minute, a.duration_min, a.effective_from, a.effective_to,
+  a.created_at, a.updated_at, a.deleted_at`;
+
+export interface ActivityRow {
+  id: string;
+  member_id: string;
+  title: string;
+  kind: ActivityKind;
+  location: string;
+  note: string;
+  days_of_week: string;
+  start_minute: number;
+  duration_min: number;
+  effective_from: string;
+  effective_to: string | null;
+  created_at: number;
+  updated_at: number;
+  deleted_at: number | null;
+  member_name?: string;
+}
+
+/** '1,3,5' → [1,3,5]. Chuỗi rỗng cho mảng rỗng chứ không phải [NaN]. */
+export function parseDaysOfWeek(raw: string): Weekday[] {
+  return raw
+    .split(',')
+    .filter((part) => part !== '')
+    .map(Number) as Weekday[];
+}
+
+export function mapActivity(row: ActivityRow): Activity {
+  const endMinute = row.start_minute + row.duration_min;
+  return {
+    id: row.id,
+    memberId: row.member_id,
+    memberName: row.member_name ?? '',
+    title: row.title,
+    kind: row.kind,
+    location: row.location,
+    note: row.note,
+    daysOfWeek: parseDaysOfWeek(row.days_of_week),
+    startTime: toTimeLabel(row.start_minute),
+    endTime: toTimeLabel(endMinute),
+    durationMin: row.duration_min,
+    overnight: isOvernight(row.start_minute, row.duration_min),
+    effectiveFrom: row.effective_from,
+    effectiveTo: row.effective_to,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+export async function listActivities(
+  db: D1Database,
+  householdId: string,
+  options: { memberId?: string; kind?: ActivityKind; includeDeleted?: boolean } = {},
+): Promise<Activity[]> {
+  const where = ['a.household_id = ?'];
+  const binds: unknown[] = [householdId];
+  if (!options.includeDeleted) where.push('a.deleted_at IS NULL');
+  if (options.memberId) {
+    where.push('a.member_id = ?');
+    binds.push(options.memberId);
+  }
+  if (options.kind) {
+    where.push('a.kind = ?');
+    binds.push(options.kind);
+  }
+  const { results } = await db
+    .prepare(
+      `SELECT ${ACTIVITY_COLUMNS}, m.name AS member_name
+       FROM activities a JOIN family_members m ON m.id = a.member_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY m.sort_order, m.name, a.start_minute, a.title`,
+    )
+    .bind(...binds)
+    .all<ActivityRow>();
+  return results.map(mapActivity);
+}
+
+export async function getActivity(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  includeDeleted = false,
+): Promise<Activity | null> {
+  const row = await db
+    .prepare(
+      `SELECT ${ACTIVITY_COLUMNS}, m.name AS member_name
+       FROM activities a JOIN family_members m ON m.id = a.member_id
+       WHERE a.household_id = ? AND a.id = ?${includeDeleted ? '' : ' AND a.deleted_at IS NULL'}`,
+    )
+    .bind(householdId, id)
+    .first<ActivityRow>();
+  return row ? mapActivity(row) : null;
+}
+
+export interface ActivityInput {
+  memberId: string;
+  title: string;
+  kind: ActivityKind;
+  location: string;
+  note: string;
+  daysOfWeek: number[];
+  startMinute: number;
+  durationMin: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
+
+export async function insertActivity(
+  db: D1Database,
+  householdId: string,
+  input: ActivityInput,
+  now: number,
+): Promise<string> {
+  const id = newId();
+  await db
+    .prepare(
+      `INSERT INTO activities
+         (id, household_id, member_id, title, kind, location, note, days_of_week,
+          start_minute, duration_min, effective_from, effective_to, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      id,
+      householdId,
+      input.memberId,
+      input.title,
+      input.kind,
+      input.location,
+      input.note,
+      input.daysOfWeek.join(','),
+      input.startMinute,
+      input.durationMin,
+      input.effectiveFrom,
+      input.effectiveTo,
+      now,
+      now,
+    )
+    .run();
+  return id;
+}
+
+export async function updateActivity(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  patch: Partial<ActivityInput>,
+  now: number,
+): Promise<boolean> {
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  const push = (column: string, value: unknown) => {
+    sets.push(`${column} = ?`);
+    binds.push(value);
+  };
+  if (patch.memberId !== undefined) push('member_id', patch.memberId);
+  if (patch.title !== undefined) push('title', patch.title);
+  if (patch.kind !== undefined) push('kind', patch.kind);
+  if (patch.location !== undefined) push('location', patch.location);
+  if (patch.note !== undefined) push('note', patch.note);
+  if (patch.daysOfWeek !== undefined) push('days_of_week', patch.daysOfWeek.join(','));
+  if (patch.startMinute !== undefined) push('start_minute', patch.startMinute);
+  if (patch.durationMin !== undefined) push('duration_min', patch.durationMin);
+  if (patch.effectiveFrom !== undefined) push('effective_from', patch.effectiveFrom);
+  if (patch.effectiveTo !== undefined) push('effective_to', patch.effectiveTo);
+  if (sets.length === 0) return true;
+  push('updated_at', now);
+  binds.push(householdId, id);
+  const res = await db
+    .prepare(
+      `UPDATE activities SET ${sets.join(', ')}
+       WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
+    )
+    .bind(...binds)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+export async function softDeleteActivity(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  now: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE activities SET deleted_at = ?, updated_at = ?
+       WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
+    )
+    .bind(now, now, householdId, id)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+export async function restoreActivity(
+  db: D1Database,
+  householdId: string,
+  id: string,
+  now: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE activities SET deleted_at = NULL, updated_at = ?
+       WHERE household_id = ? AND id = ? AND deleted_at IS NOT NULL`,
+    )
+    .bind(now, householdId, id)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/* ------------------------------------------------------ ngoại lệ từng buổi */
+
+export interface ExceptionRow {
+  id: string;
+  activity_id: string;
+  occurs_on: string;
+  status: 'cancelled' | 'moved';
+  new_date: string | null;
+  new_start_minute: number | null;
+  new_duration_min: number | null;
+  note: string;
+}
+
+const EXCEPTION_COLUMNS = `id, activity_id, occurs_on, status, new_date, new_start_minute,
+  new_duration_min, note`;
+
+export function mapException(row: ExceptionRow): ActivityException {
+  return {
+    id: row.id,
+    activityId: row.activity_id,
+    occursOn: row.occurs_on,
+    status: row.status,
+    newDate: row.new_date,
+    newStartTime: row.new_start_minute === null ? null : toTimeLabel(row.new_start_minute),
+    newDurationMin: row.new_duration_min,
+    note: row.note,
+  };
+}
+
+export async function listExceptionsOfActivity(
+  db: D1Database,
+  householdId: string,
+  activityId: string,
+): Promise<ActivityException[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${EXCEPTION_COLUMNS} FROM activity_exceptions
+       WHERE household_id = ? AND activity_id = ? ORDER BY occurs_on`,
+    )
+    .bind(householdId, activityId)
+    .all<ExceptionRow>();
+  return results.map(mapException);
+}
+
+export interface ExceptionInput {
+  activityId: string;
+  occursOn: string;
+  status: 'cancelled' | 'moved';
+  newDate: string | null;
+  newStartMinute: number | null;
+  newDurationMin: number | null;
+  note: string;
+}
+
+export async function insertException(
+  db: D1Database,
+  householdId: string,
+  input: ExceptionInput,
+  now: number,
+): Promise<string> {
+  const id = newId();
+  await db
+    .prepare(
+      `INSERT INTO activity_exceptions
+         (id, household_id, activity_id, occurs_on, status, new_date, new_start_minute,
+          new_duration_min, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      id,
+      householdId,
+      input.activityId,
+      input.occursOn,
+      input.status,
+      input.newDate,
+      input.newStartMinute,
+      input.newDurationMin,
+      input.note,
+      now,
+    )
+    .run();
+  return id;
+}
+
+/** Xoá hẳn: ngoại lệ chính là cái "undo" của một buổi, xoá mềm nó thì vô nghĩa. */
+export async function deleteException(
+  db: D1Database,
+  householdId: string,
+  activityId: string,
+  occursOn: string,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `DELETE FROM activity_exceptions
+       WHERE household_id = ? AND activity_id = ? AND occurs_on = ?`,
+    )
+    .bind(householdId, activityId, occursOn)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/* ------------------------------------------------- nạp dữ liệu cho calendar */
+
+/**
+ * Khuôn mẫu có thể sinh buổi trong [from, toExclusive).
+ *
+ * Join sang family_members và lọc deleted_at IS NULL ở cả hai bảng: lịch của
+ * thành viên đã xoá mềm phải biến khỏi calendar.
+ */
+export async function listActivitiesInRange(
+  db: D1Database,
+  householdId: string,
+  range: { from: string; toExclusive: string; memberId?: string; kind?: ActivityKind },
+): Promise<ActivityRow[]> {
+  const where = [
+    'a.household_id = ?',
+    'a.deleted_at IS NULL',
+    'm.deleted_at IS NULL',
+    'a.effective_from < ?',
+    '(a.effective_to IS NULL OR a.effective_to >= ?)',
+  ];
+  const binds: unknown[] = [householdId, range.toExclusive, range.from];
+  if (range.memberId) {
+    where.push('a.member_id = ?');
+    binds.push(range.memberId);
+  }
+  if (range.kind) {
+    where.push('a.kind = ?');
+    binds.push(range.kind);
+  }
+  const { results } = await db
+    .prepare(
+      `SELECT ${ACTIVITY_COLUMNS}, m.name AS member_name
+       FROM activities a JOIN family_members m ON m.id = a.member_id
+       WHERE ${where.join(' AND ')}`,
+    )
+    .bind(...binds)
+    .all<ActivityRow>();
+  return results;
+}
+
+/**
+ * Ngoại lệ liên quan tới khoảng đang xem.
+ *
+ * Lấy theo `occurs_on` (buổi gốc nằm trong khoảng) HOẶC `new_date` (buổi bị dời
+ * từ ngoài khoảng vào trong) — thiếu vế thứ hai là mất buổi đã dời tới.
+ * Nới hai đầu một ngày để ca qua đêm ở biên không bị sót ngoại lệ của nó.
+ */
+export async function listExceptionsInRange(
+  db: D1Database,
+  householdId: string,
+  range: { from: string; toExclusive: string },
+): Promise<ExceptionRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${EXCEPTION_COLUMNS} FROM activity_exceptions
+       WHERE household_id = ?
+         AND ((occurs_on >= ? AND occurs_on < ?) OR (new_date >= ? AND new_date < ?))`,
+    )
+    .bind(householdId, range.from, range.toExclusive, range.from, range.toExclusive)
+    .all<ExceptionRow>();
+  return results;
+}
+
+/** Mọi ngoại lệ của một nhóm khuôn mẫu — dùng khi cần đủ ngữ cảnh chứ không chỉ trong khoảng. */
+export async function listExceptionsForActivities(
+  db: D1Database,
+  householdId: string,
+  activityIds: string[],
+): Promise<ExceptionRow[]> {
+  if (activityIds.length === 0) return [];
+  const holes = activityIds.map(() => '?').join(', ');
+  const { results } = await db
+    .prepare(
+      `SELECT ${EXCEPTION_COLUMNS} FROM activity_exceptions
+       WHERE household_id = ? AND activity_id IN (${holes})`,
+    )
+    .bind(householdId, ...activityIds)
+    .all<ExceptionRow>();
+  return results;
 }

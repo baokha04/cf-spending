@@ -56,6 +56,34 @@ export function monthOf(date: string): string {
   return date.slice(0, 7);
 }
 
+/**
+ * Cộng/trừ ngày. Đi qua Date.UTC chứ không phải Date local — giống daysInMonth
+ * ở trên: UTC không có DST nên phép cộng là chính xác, và Việt Nam cũng không có
+ * DST nên kết quả đúng luôn cho giờ Việt Nam.
+ */
+export function addDays(date: string, delta: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
+}
+
+/** Thứ theo ISO-8601: 1 = Thứ 2 … 7 = Chủ nhật. */
+export function isoWeekday(date: string): number {
+  const [y, m, d] = date.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0 = Chủ nhật
+  return day === 0 ? 7 : day;
+}
+
+/** Thứ 2 của tuần chứa ngày này. */
+export function startOfIsoWeek(date: string): string {
+  return addDays(date, 1 - isoWeekday(date));
+}
+
+/** Số ngày từ `from` tới `to`; âm nếu `to` nằm trước. */
+export function daysBetween(from: string, to: string): number {
+  const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
+  return Math.round(ms / 86_400_000);
+}
+
 /** Tháng hiện tại theo giờ Việt Nam (UTC+7), vì Workers chạy UTC. */
 export function currentMonthInVietnam(now: number = Date.now()): string {
   const shifted = new Date(now + 7 * 60 * 60 * 1000);

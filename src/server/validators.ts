@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DATE_RE, isValidDate, isValidMonth } from './dates';
+import { TIME_RE } from '../shared/time';
 
 const isoDate = z
   .string()
@@ -125,6 +126,138 @@ export const largeQuerySchema = z.object({
 export const askSchema = z.object({
   question: z.string().trim().min(3, 'Câu hỏi quá ngắn').max(500),
 });
+
+/* ==================================================== lịch hoạt động ===== */
+
+export const FAMILY_RELATIONS = ['bo', 'me', 'con', 'ong', 'ba', 'khac'] as const;
+export const MEMBER_COLORS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'] as const;
+export const ACTIVITY_KINDS = ['work', 'teach', 'study', 'other'] as const;
+
+/** Khoảng ngày tối đa của một lần hỏi lịch — đủ cho lưới tháng 6×7 = 42 ô. */
+export const MAX_SCHEDULE_SPAN_DAYS = 62;
+
+const timeSchema = z.string().regex(TIME_RE, 'Giờ phải có dạng HH:MM');
+
+/** Tham số ?kind= trên các endpoint lịch. */
+export const activityKindParam = z.enum(ACTIVITY_KINDS);
+
+/** Các thứ trong tuần; khử trùng và sắp tăng dần để lưu xuống luôn ở dạng chuẩn. */
+const daysOfWeekSchema = z
+  .array(z.number().int().min(1, 'Thứ không hợp lệ').max(7, 'Thứ không hợp lệ'))
+  .min(1, 'Chọn ít nhất một thứ trong tuần')
+  .max(7)
+  .transform((days) => [...new Set(days)].sort((a, b) => a - b));
+
+export const familyMemberCreateSchema = z.object({
+  name: z.string().trim().min(1, 'Cần nhập tên thành viên').max(60),
+  nickname: z.string().trim().max(30).default(''),
+  relation: z.enum(FAMILY_RELATIONS).default('khac'),
+  color: z.enum(MEMBER_COLORS),
+  icon: z.string().trim().max(8).nullish(),
+  birthDate: isoDate.nullish(),
+  /** Gắn với tài khoản đăng nhập nào; bỏ trống cho người không có tài khoản. */
+  userId: z.string().trim().min(1).nullish(),
+  sortOrder: z.number().int().min(0).max(999).default(0),
+});
+
+export const familyMemberUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60).optional(),
+    nickname: z.string().trim().max(30).optional(),
+    relation: z.enum(FAMILY_RELATIONS).optional(),
+    color: z.enum(MEMBER_COLORS).optional(),
+    icon: z.string().trim().max(8).nullish(),
+    birthDate: isoDate.nullish(),
+    userId: z.string().trim().min(1).nullish(),
+    sortOrder: z.number().int().min(0).max(999).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'Không có trường nào để cập nhật' });
+
+/** Giờ kết thúc sớm hơn hoặc bằng giờ bắt đầu = ca qua đêm; bằng nhau là buổi dài 0. */
+const timeRangeRefine = <T extends { startTime?: string; endTime?: string }>(v: T) =>
+  v.startTime === undefined || v.endTime === undefined || v.startTime !== v.endTime;
+const TIME_RANGE_MESSAGE = 'Giờ kết thúc phải khác giờ bắt đầu';
+
+/** effectiveTo là mốc bao gồm, nên bằng effectiveFrom vẫn hợp lệ (buổi lẻ). */
+const effectiveRangeRefine = <T extends { effectiveFrom?: string; effectiveTo?: string | null }>(
+  v: T,
+) => !v.effectiveFrom || !v.effectiveTo || v.effectiveTo >= v.effectiveFrom;
+const EFFECTIVE_RANGE_MESSAGE = 'Ngày kết thúc phải từ ngày bắt đầu trở đi';
+
+export const activityCreateSchema = z
+  .object({
+    memberId: z.string().trim().min(1, 'Cần chọn thành viên'),
+    title: z.string().trim().min(1, 'Cần nhập tên hoạt động').max(80),
+    kind: z.enum(ACTIVITY_KINDS),
+    location: z.string().trim().max(120).default(''),
+    note: z.string().trim().max(500).default(''),
+    daysOfWeek: daysOfWeekSchema,
+    startTime: timeSchema,
+    endTime: timeSchema,
+    effectiveFrom: isoDate,
+    effectiveTo: isoDate.nullish(),
+  })
+  .refine(timeRangeRefine, { message: TIME_RANGE_MESSAGE, path: ['endTime'] })
+  .refine(effectiveRangeRefine, { message: EFFECTIVE_RANGE_MESSAGE, path: ['effectiveTo'] });
+
+export const activityUpdateSchema = z
+  .object({
+    memberId: z.string().trim().min(1).optional(),
+    title: z.string().trim().min(1).max(80).optional(),
+    kind: z.enum(ACTIVITY_KINDS).optional(),
+    location: z.string().trim().max(120).optional(),
+    note: z.string().trim().max(500).optional(),
+    daysOfWeek: daysOfWeekSchema.optional(),
+    startTime: timeSchema.optional(),
+    endTime: timeSchema.optional(),
+    effectiveFrom: isoDate.optional(),
+    effectiveTo: isoDate.nullish(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'Không có trường nào để cập nhật' })
+  // Sửa một trong hai giờ thì phải gửi cả cặp — nếu không server không biết giờ
+  // còn lại là bao nhiêu để tính lại độ dài.
+  .refine((v) => (v.startTime === undefined) === (v.endTime === undefined), {
+    message: 'Đổi giờ thì phải gửi cả giờ bắt đầu và giờ kết thúc',
+    path: ['endTime'],
+  })
+  .refine(timeRangeRefine, { message: TIME_RANGE_MESSAGE, path: ['endTime'] })
+  .refine(effectiveRangeRefine, { message: EFFECTIVE_RANGE_MESSAGE, path: ['effectiveTo'] });
+
+export const activityExceptionSchema = z
+  .object({
+    occursOn: isoDate,
+    status: z.enum(['cancelled', 'moved']),
+    newDate: isoDate.nullish(),
+    newStartTime: timeSchema.nullish(),
+    newEndTime: timeSchema.nullish(),
+    note: z.string().trim().max(200).default(''),
+  })
+  .refine((v) => v.status !== 'moved' || v.newDate || v.newStartTime, {
+    message: 'Dời buổi thì phải đổi ngày hoặc đổi giờ',
+    path: ['newDate'],
+  })
+  .refine((v) => Boolean(v.newStartTime) === Boolean(v.newEndTime), {
+    message: 'Đổi giờ thì phải gửi cả giờ bắt đầu và giờ kết thúc',
+    path: ['newEndTime'],
+  })
+  .refine((v) => !v.newStartTime || v.newStartTime !== v.newEndTime, {
+    message: TIME_RANGE_MESSAGE,
+    path: ['newEndTime'],
+  })
+  // 'cancelled' mà kèm ngày/giờ mới là mâu thuẫn — bắt sớm còn hơn lặng lẽ bỏ qua.
+  .refine((v) => v.status !== 'cancelled' || !(v.newDate || v.newStartTime), {
+    message: 'Nghỉ buổi thì không kèm ngày hay giờ mới',
+    path: ['status'],
+  });
+
+export const scheduleQuerySchema = z
+  .object({
+    from: isoDate,
+    to: isoDate,
+    memberId: z.string().trim().min(1).optional(),
+    kind: z.enum(ACTIVITY_KINDS).optional(),
+  })
+  .refine((v) => v.to >= v.from, { message: 'Ngày kết thúc phải từ ngày bắt đầu trở đi', path: ['to'] });
 
 /** Gom lỗi zod thành một câu tiếng Việt để hiển thị thẳng lên UI. */
 export function formatZodError(error: z.ZodError): string {
