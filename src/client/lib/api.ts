@@ -5,6 +5,7 @@ import type {
   AskResponse,
   Category,
   DashboardSummary,
+  ExpiringResponse,
   FamilyMember,
   FamilyRelation,
   LargeTransactionsResponse,
@@ -67,6 +68,8 @@ export interface TransactionInput {
   amount: number | string;
   direction: 'income' | 'expense';
   recurrence: 'monthly' | 'one_off';
+  /** null nghĩa là không có hạn; gửi null khi sửa để bỏ hạn đang có. */
+  expiresOn: string | null;
   categoryId: string | null;
 }
 
@@ -156,6 +159,9 @@ export const api = {
   transaction: (id: string) => request<Transaction>(`/transactions/${id}`),
   largeTransactions: (q: { month?: string; min?: number; limit?: number } = {}) =>
     request<LargeTransactionsResponse>(`/transactions/large${query({ ...q })}`),
+  /** Khoản quá hạn và khoản hết hạn trong `days` ngày tới; mặc định một tuần. */
+  expiringTransactions: (q: { days?: number; limit?: number } = {}) =>
+    request<ExpiringResponse>(`/transactions/expiring${query({ ...q })}`),
   createTransaction: (body: TransactionInput) => post<Transaction>('/transactions', body),
   updateTransaction: (id: string, body: Partial<TransactionInput>) =>
     request<Transaction>(`/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),

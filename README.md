@@ -5,7 +5,9 @@
 Mỗi giao dịch lưu **thời gian, nội dung, số tiền, chiều thu/chi**, và được phân loại
 theo tính chất **hàng tháng** (cố định: tiền nhà, điện, học phí) hay **phát sinh**.
 Riêng những khoản đáng nhớ còn ghi thêm được **chi tiết, bên nhận/nguồn tiền và hình
-thức thanh toán**. Dashboard so sánh trực tiếp tháng hiện tại với tháng trước, còn
+thức thanh toán**. Khoản nào có **ngày hết hạn** — bảo hiểm, tiền thuê nhà, gói cước,
+phí thường niên — thì ghi hạn vào giao dịch, app sẽ **nhắc gia hạn từ một tuần trước
+hạn** và gia hạn ngay tại chỗ chỉ bằng một nút. Dashboard so sánh trực tiếp tháng hiện tại với tháng trước, còn
 trang **Khoản lớn** gom các khoản thu/chi vượt ngưỡng để soi kỹ từng khoản. Nhiều tài
 khoản có thể vào chung một hộ gia đình qua mã mời để thấy chung số liệu.
 
@@ -18,8 +20,8 @@ giao dịch.
 
 | Trang | Làm gì |
 |---|---|
-| Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước |
-| Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
+| Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước, kèm thẻ **nhắc gia hạn** ở trên cùng |
+| Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết, và có **ngày hết hạn** tuỳ chọn. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
 | Lịch hoạt động | Lưới **tuần trục giờ** và lưới **tháng** cho lịch đi làm, đi dạy, đi học của từng người; mỗi thành viên một màu, chồng giờ nằm cạnh nhau. Nghỉ hoặc dời **từng buổi** mà không đụng tới khuôn mẫu lặp. **Sao chép** một hoạt động để tạo nhanh cái gần giống, hoặc để đưa sang người khác |
 | Lịch riêng | Màn hình của **một người**: tuần của họ, thống kê tuần đó (số buổi, tổng giờ, ngày bận nhất, giờ theo từng loại), toàn bộ hoạt động đang khai cho họ, và nút **chép cả lịch sang người khác**. Vào từ tên người trên legend của lịch cả nhà, hoặc từ nút **Lịch riêng** ở trang Hộ gia đình |
@@ -188,8 +190,9 @@ npm run build   # typecheck + build production
 Bộ test phủ sáu nhóm: xác thực và **cô lập dữ liệu giữa các hộ**, CRUD cùng kiểm tra
 dữ liệu đầu vào, độ chính xác của tổng hợp dashboard (gồm các mốc biên tháng, năm
 nhuận, và trường hợp tháng trước rỗng), chỉnh sửa danh mục (kể cả đổi tên trùng),
-phần chi tiết giao dịch cùng báo cáo khoản lớn, và xoá mềm — khôi phục cùng việc
-giao dịch đã xoá không lọt vào bất kỳ số liệu tổng hợp nào.
+phần chi tiết giao dịch cùng báo cáo khoản lớn, xoá mềm — khôi phục cùng việc giao
+dịch đã xoá không lọt vào bất kỳ số liệu tổng hợp nào, và **ngày hết hạn** — thứ tự
+ngày, cộng tháng ở các mốc biên, và ranh giới của cửa sổ nhắc gia hạn.
 
 ## Cấu trúc
 
@@ -208,6 +211,7 @@ src/server/
   ai/                       embed, tìm kiếm ngữ nghĩa, hỏi đáp RAG
 src/client/                 React SPA
 src/shared/types.ts         Kiểu dùng chung hai phía
+src/shared/expiry.ts        Luật hạn và gia hạn, dùng chung server lẫn client
 ```
 
 ## Vài quyết định đáng lưu ý
@@ -246,6 +250,24 @@ văn hàng tuần — gõ lại từ đầu mỗi lần là chỗ dễ bỏ sót
 tiền giảm dần, kèm tỷ trọng trên tổng tháng và đánh dấu khoản chưa ghi chi tiết. Ba
 cột mới (`detail`, `payee`, `payment_method`) đều `NOT NULL DEFAULT ''` nên dữ liệu cũ
 không phải backfill; phần chi tiết cũng vào luôn văn bản embedding và bộ lọc từ khoá.
+
+**Ngày hết hạn và nhắc gia hạn.** `transactions.expires_on` để `NULL` được, khác với
+ba cột chi tiết ở migration 0002: "không có hạn" là một trạng thái thật của phần lớn
+giao dịch, không phải "chưa kịp ghi". `GET /api/transactions/expiring?days=7` trả về
+hai nhóm — **đã quá hạn** và **hết hạn trong cửa sổ nhắc** — mỗi khoản kèm sẵn số ngày
+còn lại tính theo *hôm nay của server* (giờ Việt Nam), để hai máy trong nhà mở app
+cùng lúc thấy đúng một danh sách. Danh sách quá hạn không có cận dưới: một khoản chưa
+gia hạn thì càng để lâu càng phải nhắc, chứ không phải im đi sau vài ngày.
+
+Gia hạn nối tiếp từ **hạn cũ** chứ không phải từ hôm nay, nếu không mỗi lần gia hạn
+muộn vài ngày là chu kỳ trôi dần; chỉ khi hạn cũ đã lùi vào quá khứ thì mới tính từ
+hôm nay. Cộng tháng cũng kẹp lại theo độ dài tháng đích: 31/01 thêm một tháng ra
+28/02 (29/02 năm nhuận) chứ không tràn sang tháng 3. Cả hai luật này nằm ở
+`src/shared/expiry.ts` để server và client không bao giờ tính lệch nhau.
+
+Trên bảng giao dịch, pill hạn chỉ hiện khi khoản đó **quá hạn hoặc sắp hết hạn** —
+hạn còn xa thì nằm trong phần chi tiết là đủ. Pill luôn có chữ ("Quá hạn 3 ngày",
+"Còn 5 ngày"), màu chỉ là lớp nhấn thêm.
 
 **Sửa danh mục không đụng vào giao dịch.** Đổi tên hay biểu tượng chỉ ghi lại hàng
 `categories`, mọi giao dịch vẫn trỏ theo `category_id` nên lịch sử giữ nguyên. Loại

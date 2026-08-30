@@ -1,5 +1,6 @@
 import type { Transaction } from '../../shared/types';
-import { PAYMENT_METHOD_LABEL, dateTimeLabel } from '../lib/format';
+import { daysUntil } from '../../shared/expiry';
+import { PAYMENT_METHOD_LABEL, dateTimeLabel, expiryFullLabel, todayISO } from '../lib/format';
 
 /** Một khoản có ghi thêm thông tin gì ngoài các trường bắt buộc không? */
 export function hasExtraInfo(tx: Transaction): boolean {
@@ -17,6 +18,10 @@ export function TransactionDetails({ tx }: { tx: Transaction }) {
     rows.push([tx.direction === 'income' ? 'Nhận từ' : 'Trả cho', tx.payee]);
   }
   if (tx.paymentMethod) rows.push(['Hình thức', PAYMENT_METHOD_LABEL[tx.paymentMethod]]);
+  // Hạn nào cũng hiện ở đây, kể cả hạn còn xa — bảng chỉ nhấn mạnh hạn sắp tới.
+  if (tx.expiresOn) {
+    rows.push(['Hết hạn', expiryFullLabel(tx.expiresOn, daysUntil(todayISO(), tx.expiresOn))]);
+  }
   rows.push(['Danh mục', tx.categoryName ?? 'Chưa phân loại']);
   rows.push(['Người nhập', tx.createdByName]);
   if (tx.deletedAt !== null) rows.push(['Đã xoá lúc', dateTimeLabel(tx.deletedAt)]);

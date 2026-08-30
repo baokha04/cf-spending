@@ -6,8 +6,15 @@ import type {
   Recurrence,
   Transaction,
 } from '../../shared/types';
+import { RENEW_MONTH_OPTIONS, addMonths } from '../../shared/expiry';
 import { api } from '../lib/api';
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABEL, money, todayISO } from '../lib/format';
+import {
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABEL,
+  fullDateLabel,
+  money,
+  todayISO,
+} from '../lib/format';
 
 /**
  * Từ mức này trở lên, phần chi tiết tự mở sẵn: khoản lớn là thứ vài tháng sau
@@ -48,6 +55,8 @@ interface FormState {
   amount: string;
   direction: Direction;
   recurrence: Recurrence;
+  /** Chuỗi rỗng nghĩa là khoản này không có hạn. */
+  expiresOn: string;
   categoryId: string;
 }
 
@@ -61,6 +70,7 @@ function fromTransaction(tx: Transaction, occurredOn: string): FormState {
     amount: String(tx.amount),
     direction: tx.direction,
     recurrence: tx.recurrence,
+    expiresOn: tx.expiresOn ?? '',
     categoryId: tx.categoryId ?? '',
   };
 }
@@ -79,6 +89,7 @@ function initialState(editing: Transaction | null, copying?: Transaction | null)
     amount: '',
     direction: 'expense',
     recurrence: 'one_off',
+    expiresOn: '',
     categoryId: '',
   };
 }
@@ -124,6 +135,8 @@ export function TransactionForm({ categories, editing, copying, onSaved, onCance
       amount: form.amount,
       direction: form.direction,
       recurrence: form.recurrence,
+      // Rỗng gửi đi thành null: sửa mà xoá trống ô ngày nghĩa là bỏ hạn.
+      expiresOn: form.expiresOn || null,
       categoryId: form.categoryId || null,
     };
     try {
@@ -222,6 +235,41 @@ export function TransactionForm({ categories, editing, copying, onSaved, onCance
             <option value="monthly">Hàng tháng (cố định)</option>
           </select>
         </div>
+      </div>
+
+      <div className="field expiry-field">
+        <label htmlFor="tx-expires">Ngày hết hạn (không bắt buộc)</label>
+        <input
+          id="tx-expires"
+          type="date"
+          min={form.occurredOn}
+          value={form.expiresOn}
+          onChange={(e) => set('expiresOn', e.target.value)}
+        />
+        <div className="expiry-presets">
+          {/* Cộng dồn từ hạn đang có, chưa có hạn thì tính từ ngày phát sinh —
+              nên bấm '+1 tháng' hai lần là hai tháng, đúng như trông đợi. */}
+          {RENEW_MONTH_OPTIONS.map((months) => (
+            <button
+              key={months}
+              type="button"
+              className="ghost"
+              onClick={() => set('expiresOn', addMonths(form.expiresOn || form.occurredOn, months))}
+            >
+              +{months} tháng
+            </button>
+          ))}
+          {form.expiresOn && (
+            <button type="button" className="ghost" onClick={() => set('expiresOn', '')}>
+              Bỏ hạn
+            </button>
+          )}
+        </div>
+        <p className="field-hint">
+          {form.expiresOn
+            ? `Hết hạn ${fullDateLabel(form.expiresOn)} — sẽ nhắc gia hạn từ một tuần trước đó.`
+            : 'Bảo hiểm, tiền thuê nhà, gói cước, phí thường niên… Ghi hạn vào đây thì trước hạn một tuần ứng dụng sẽ nhắc gia hạn.'}
+        </p>
       </div>
 
       <div className="detail-block">

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DATE_RE, isValidDate, isValidMonth } from './dates';
 import { TIME_RE } from '../shared/time';
+import { EXPIRY_WINDOW_DAYS, MAX_EXPIRY_WINDOW_DAYS } from '../shared/expiry';
 
 const isoDate = z
   .string()
@@ -90,17 +91,31 @@ const paymentMethodSchema = z
 const detailSchema = z.string().trim().max(2000, 'Phần chi tiết tối đa 2000 ký tự');
 const payeeSchema = z.string().trim().max(120, 'Tên bên nhận/nguồn tiền tối đa 120 ký tự');
 
-export const transactionCreateSchema = z.object({
-  occurredOn: isoDate,
-  note: z.string().trim().max(500).default(''),
-  detail: detailSchema.default(''),
-  payee: payeeSchema.default(''),
-  paymentMethod: paymentMethodSchema,
-  amount: amountSchema,
-  direction: z.enum(['income', 'expense']),
-  recurrence: z.enum(['monthly', 'one_off']),
-  categoryId: z.string().trim().min(1).nullish(),
-});
+/**
+ * Hạn phải từ ngày phát sinh trở đi; bằng nhau vẫn hợp lệ (khoản chỉ có giá trị
+ * đúng hôm đó). Ràng buộc này không nằm ở CHECK trong SQLite vì thông báo lỗi
+ * phải nói được bằng tiếng Việt.
+ */
+export const EXPIRY_ORDER_MESSAGE = 'Ngày hết hạn phải từ ngày phát sinh trở đi';
+
+export const transactionCreateSchema = z
+  .object({
+    occurredOn: isoDate,
+    note: z.string().trim().max(500).default(''),
+    detail: detailSchema.default(''),
+    payee: payeeSchema.default(''),
+    paymentMethod: paymentMethodSchema,
+    amount: amountSchema,
+    direction: z.enum(['income', 'expense']),
+    recurrence: z.enum(['monthly', 'one_off']),
+    /** null hoặc bỏ trống nghĩa là khoản này không có hạn phải gia hạn. */
+    expiresOn: isoDate.nullish(),
+    categoryId: z.string().trim().min(1).nullish(),
+  })
+  .refine((v) => !v.expiresOn || v.expiresOn >= v.occurredOn, {
+    message: EXPIRY_ORDER_MESSAGE,
+    path: ['expiresOn'],
+  });
 
 export const transactionUpdateSchema = z
   .object({
@@ -112,9 +127,25 @@ export const transactionUpdateSchema = z
     amount: amountSchema.optional(),
     direction: z.enum(['income', 'expense']).optional(),
     recurrence: z.enum(['monthly', 'one_off']).optional(),
+    /** Gửi null để bỏ hạn; không gửi trường này thì hạn cũ giữ nguyên. */
+    expiresOn: isoDate.nullish(),
     categoryId: z.string().trim().min(1).nullish(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Không có trường nào để cập nhật' });
+
+/**
+ * Danh sách nhắc gia hạn. `days` là cửa sổ nhắc: 0 nghĩa là chỉ những khoản
+ * hết hạn hôm nay trở về trước.
+ */
+export const expiringQuerySchema = z.object({
+  days: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_EXPIRY_WINDOW_DAYS, `Cửa sổ nhắc tối đa ${MAX_EXPIRY_WINDOW_DAYS} ngày`)
+    .default(EXPIRY_WINDOW_DAYS),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
 
 export const largeQuerySchema = z.object({
   month: monthParam.optional(),

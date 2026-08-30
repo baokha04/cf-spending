@@ -24,6 +24,7 @@ export interface EmbeddableTransaction {
   amount: number;
   direction: Direction;
   recurrence: Recurrence;
+  expires_on: string | null;
   category_name: string | null;
 }
 
@@ -42,6 +43,8 @@ export function embeddingText(tx: EmbeddableTransaction): string {
   // Phần chi tiết và bên nhận chỉ có ở những khoản được ghi kỹ, thường là khoản
   // lớn — đưa vào embedding để hỏi đáp trả lời được "vì sao tháng này chi nhiều".
   if (tx.payee) parts.push(`bên nhận ${tx.payee}`);
+  // Có hạn thì nói ra, để hỏi đáp trả lời được "khoản nào sắp phải gia hạn".
+  if (tx.expires_on) parts.push(`hết hạn ngày ${tx.expires_on}`);
   if (tx.detail) parts.push(tx.detail);
   return parts.join(' · ');
 }
@@ -114,7 +117,7 @@ export async function deleteTransactionVector(env: Env, id: string): Promise<voi
 export async function embedTransactionById(env: Env, householdId: string, id: string): Promise<void> {
   const row = await env.DB.prepare(
     `SELECT t.id, t.household_id, t.occurred_on, t.note, t.detail, t.payee,
-            t.amount, t.direction, t.recurrence, c.name AS category_name
+            t.amount, t.direction, t.recurrence, t.expires_on, c.name AS category_name
      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
      WHERE t.household_id = ? AND t.id = ? AND t.deleted_at IS NULL`,
   )
