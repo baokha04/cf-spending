@@ -9,9 +9,32 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="color-scheme" content="light dark" />
-    <!-- Màu thanh trạng thái khớp nền trang để không lộ vệt màu lạ khi cuộn. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9f9f7" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0d0d" />
+    <!-- Màu thanh trạng thái khớp nền trang để không lộ vệt màu lạ khi cuộn.
+         Một thẻ duy nhất, không gắn media: người dùng chọn được giao diện ngược
+         với hệ điều hành, nên màu này do script bên dưới quyết định chứ không
+         phải media query. -->
+    <meta name="theme-color" content="#f9f9f7" />
+    <script>
+      // Chạy đồng bộ trước lần vẽ đầu tiên. Nếu để React đặt data-theme thì người
+      // chọn nền Tối trên máy đang để Sáng sẽ thấy nháy trắng một khung hình.
+      // Ba mã ở đây phải khớp THEME_STORAGE_KEY và PAGE_COLOR trong src/shared/theme.ts.
+      (function () {
+        try {
+          var mode = localStorage.getItem('cf-spending:theme');
+          if (mode === 'light' || mode === 'dark') {
+            document.documentElement.dataset.theme = mode;
+          }
+          var dark =
+            mode === 'dark' ||
+            (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute('content', dark ? '#0d0d0d' : '#f9f9f7');
+        } catch (e) {
+          /* localStorage bị chặn (trang riêng tư) — cứ chạy theo máy */
+        }
+      })();
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />

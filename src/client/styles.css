@@ -132,6 +132,17 @@ a { color: var(--focus); }
 .topbar .spacer { flex: 1; }
 .topbar .who { color: var(--text-secondary); font-size: 0.85rem; }
 
+/* Nút giao diện chỉ có biểu tượng — ép ô vuông để nó không co lại theo chữ. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  flex: none;
+}
+
 .navlink {
   padding: 6px 11px;
   border-radius: 8px;
@@ -693,6 +704,9 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   /* Mọi nút đều đạt cỡ chạm tối thiểu. */
   button { min-height: var(--tap); padding: 10px 14px; }
   button.ghost { min-height: 38px; padding: 8px 10px; }
+  /* Topbar trên 393pt chỉ còn tên app + nút này + Đăng xuất, nên nút phải đạt
+     cỡ chạm mà vẫn không đẩy nút Đăng xuất xuống dòng. */
+  .theme-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; }
   .segmented { width: 100%; }
   .segmented button { flex: 1 1 0; }
 
