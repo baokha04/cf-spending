@@ -37,7 +37,9 @@ import {
   monthParam,
   registerSchema,
   scheduleQuerySchema,
+  SPLIT_TOO_LARGE_MESSAGE,
   transactionCreateSchema,
+  transactionSplitSchema,
   transactionUpdateSchema,
 } from './validators';
 import {
@@ -972,6 +974,72 @@ app.patch('/transactions/:id', requireAuth, async (c) => {
   );
   if (aiEnabled(c.env)) background(c, embedTransactionById(c.env, householdId, id));
   return c.json(await db.getTransaction(c.env.DB, householdId, id));
+});
+
+/**
+ * Tách một khoản làm hai: cắt `amount` ra thành giao dịch mới và trừ đúng chừng
+ * ấy ở khoản gốc. Một hoá đơn siêu thị 1 triệu chia thành 600k thực phẩm và
+ * 400k đồ gia dụng là chuyện thường, mà xoá đi nhập lại hai khoản thì mất luôn
+ * ngày giờ và người nhập của bản ghi cũ.
+ *
+ * Khoản mới thừa kế chiều thu/chi, tính chất, ngày và hạn của khoản gốc: tách
+ * chỉ chia nhỏ một sự việc, tổng hai mảnh phải đúng bằng số tiền ban đầu nên
+ * mọi số liệu tổng hợp không đổi.
+ */
+app.post('/transactions/:id/split', requireAuth, async (c) => {
+  const parsed = parseBody(transactionSplitSchema, await readJson(c));
+  if (!parsed.ok) return c.json({ error: parsed.message }, 400);
+  const householdId = c.get('householdId');
+  const id = c.req.param('id');
+
+  const source = await db.getTransaction(c.env.DB, householdId, id);
+  if (!source) return c.json({ error: 'Không tìm thấy giao dịch' }, 404);
+  // Bằng số tiền gốc cũng không được: khoản gốc sẽ còn 0 đồng, mà một giao dịch
+  // 0 đồng thì không còn là giao dịch. Muốn chuyển cả khoản thì sửa nó là xong.
+  if (parsed.data.amount >= source.amount) return c.json({ error: SPLIT_TOO_LARGE_MESSAGE }, 400);
+
+  const categoryId = parsed.data.categoryId ?? null;
+  const categoryError = await validateCategory(c.env, householdId, categoryId, source.direction);
+  if (categoryError) return c.json({ error: categoryError }, 400);
+
+  const embedStatus = aiEnabled(c.env) ? 'pending' : 'skipped';
+  let createdId: string;
+  try {
+    createdId = await db.splitTransaction(
+      c.env.DB,
+      householdId,
+      source,
+      c.get('user').id,
+      {
+        amount: parsed.data.amount,
+        // Không ghi gì thì mảnh cắt ra mang theo thông tin của khoản gốc: nó vẫn
+        // là cùng một sự việc, để trống hết thì sau này không ai đọc ra là gì.
+        note: parsed.data.note ?? source.note,
+        detail: parsed.data.detail ?? source.detail,
+        payee: parsed.data.payee ?? source.payee,
+        paymentMethod: parsed.data.paymentMethod ?? source.paymentMethod,
+        categoryId: categoryId ?? source.categoryId,
+      },
+      Date.now(),
+      embedStatus,
+    );
+  } catch {
+    // CHECK (amount > 0) chỉ bật khi có người khác vừa sửa số tiền gốc xen vào
+    // giữa lúc kiểm và lúc ghi. Cả batch đã quay lui nên dữ liệu vẫn nguyên vẹn.
+    return c.json({ error: 'Số tiền khoản gốc vừa thay đổi, xem lại rồi tách lần nữa' }, 409);
+  }
+
+  if (aiEnabled(c.env)) {
+    background(c, embedTransactionById(c.env, householdId, source.id));
+    background(c, embedTransactionById(c.env, householdId, createdId));
+  }
+  return c.json(
+    {
+      source: await db.getTransaction(c.env.DB, householdId, source.id),
+      created: await db.getTransaction(c.env.DB, householdId, createdId),
+    },
+    201,
+  );
 });
 
 /**

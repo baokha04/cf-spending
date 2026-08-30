@@ -7,7 +7,9 @@ theo tính chất **hàng tháng** (cố định: tiền nhà, điện, học ph
 Riêng những khoản đáng nhớ còn ghi thêm được **chi tiết, bên nhận/nguồn tiền và hình
 thức thanh toán**. Khoản nào có **ngày hết hạn** — bảo hiểm, tiền thuê nhà, gói cước,
 phí thường niên — thì ghi hạn vào giao dịch, app sẽ **nhắc gia hạn từ một tuần trước
-hạn** và gia hạn ngay tại chỗ chỉ bằng một nút. Dashboard so sánh trực tiếp tháng hiện tại với tháng trước, còn
+hạn** (kèm chuông đếm số khoản quá hạn trên thanh trên cùng) và gia hạn ngay tại chỗ
+chỉ bằng một nút. Một hoá đơn gộp nhiều thứ thì **tách** được làm hai khoản riêng mà
+tổng tiền không đổi. Dashboard so sánh trực tiếp tháng hiện tại với tháng trước, còn
 trang **Khoản lớn** gom các khoản thu/chi vượt ngưỡng để soi kỹ từng khoản. Nhiều tài
 khoản có thể vào chung một hộ gia đình qua mã mời để thấy chung số liệu.
 
@@ -21,11 +23,11 @@ giao dịch.
 | Trang | Làm gì |
 |---|---|
 | Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước, kèm thẻ **nhắc gia hạn** ở trên cùng |
-| Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết, và có **ngày hết hạn** tuỳ chọn. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
+| Giao dịch | Danh sách có lọc và tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Nút **Thêm giao dịch**, cũng như sửa, sao chép và tách, đều mở **màn hình nhập riêng**. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
 | Lịch hoạt động | Lưới **tuần trục giờ** và lưới **tháng** cho lịch đi làm, đi dạy, đi học của từng người; mỗi thành viên một màu, chồng giờ nằm cạnh nhau. Nghỉ hoặc dời **từng buổi** mà không đụng tới khuôn mẫu lặp. **Sao chép** một hoạt động để tạo nhanh cái gần giống, hoặc để đưa sang người khác |
 | Lịch riêng | Màn hình của **một người**: tuần của họ, thống kê tuần đó (số buổi, tổng giờ, ngày bận nhất, giờ theo từng loại), toàn bộ hoạt động đang khai cho họ, và nút **chép cả lịch sang người khác**. Vào từ tên người trên legend của lịch cả nhà, hoặc từ nút **Lịch riêng** ở trang Hộ gia đình |
-| Danh mục | Thêm, **sửa tên và biểu tượng** (chọn từ bảng icon có sẵn), lưu trữ hoặc xoá. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
+| Danh mục | Danh sách theo hai nhóm thu/chi, lưu trữ hoặc xoá tại chỗ; thêm và **sửa tên, biểu tượng** (chọn từ bảng icon có sẵn) ở màn hình nhập riêng. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
 | Hộ gia đình | **Thành viên trong nhà** (kể cả trẻ nhỏ, ông bà không có tài khoản), tài khoản đăng nhập và mã mời |
 
@@ -191,8 +193,9 @@ Bộ test phủ sáu nhóm: xác thực và **cô lập dữ liệu giữa các 
 dữ liệu đầu vào, độ chính xác của tổng hợp dashboard (gồm các mốc biên tháng, năm
 nhuận, và trường hợp tháng trước rỗng), chỉnh sửa danh mục (kể cả đổi tên trùng),
 phần chi tiết giao dịch cùng báo cáo khoản lớn, xoá mềm — khôi phục cùng việc giao
-dịch đã xoá không lọt vào bất kỳ số liệu tổng hợp nào, và **ngày hết hạn** — thứ tự
-ngày, cộng tháng ở các mốc biên, và ranh giới của cửa sổ nhắc gia hạn.
+dịch đã xoá không lọt vào bất kỳ số liệu tổng hợp nào, **ngày hết hạn** — thứ tự ngày,
+cộng tháng ở các mốc biên, và ranh giới của cửa sổ nhắc gia hạn — và **tách giao dịch**,
+gồm cả việc batch quay lui trọn vẹn khi ràng buộc `amount > 0` bị chạm.
 
 ## Cấu trúc
 
@@ -268,6 +271,41 @@ hôm nay. Cộng tháng cũng kẹp lại theo độ dài tháng đích: 31/01 t
 Trên bảng giao dịch, pill hạn chỉ hiện khi khoản đó **quá hạn hoặc sắp hết hạn** —
 hạn còn xa thì nằm trong phần chi tiết là đủ. Pill luôn có chữ ("Quá hạn 3 ngày",
 "Còn 5 ngày"), màu chỉ là lớp nhấn thêm.
+
+Chuông trên thanh trên cùng đếm **riêng số khoản đã quá hạn**, không gộp phần sắp hết
+hạn: con số trên huy hiệu phải trả lời đúng một câu "có bao nhiêu thứ đang trễ". Chuông
+và thẻ "Cần gia hạn" dùng chung một lần gọi API qua `ExpiryProvider`, nên không bao giờ
+có chuyện chuông báo 3 mà thẻ chỉ liệt kê 2.
+
+**Danh sách và form là hai màn hình khác nhau.** Trang Giao dịch và trang Danh mục
+chỉ hiển thị danh sách; thêm, sửa, sao chép hay tách đều mở một màn hình riêng
+(`/giao-dich/them`, `/giao-dich/:id/sua`, `/danh-muc/:id/sua`…). Trên điện thoại thì
+form và bảng không bao giờ đủ chỗ cho cả hai, mà lúc đang gõ cũng chẳng ai nhìn bảng.
+Là URL thật nên mở tab mới, bấm Back hay gửi link cho người khác đều chạy đúng.
+
+Đổi lại, mỗi lần nhập là một lần rời danh sách rồi quay về, nên **bộ lọc của trang
+Giao dịch nằm trong URL** (`?thang=…&chieu=…&tim=…`) thay vì trong state của
+component: quay về là thấy đúng danh sách đang xem dở. Màn hình form nhận đường lui
+qua `state.from` — chính URL đầy đủ của danh sách lúc mở nó — và lưu xong thì *thay*
+mục lịch sử thay vì đẩy thêm, để bấm Back không quay lại cái form vừa lưu. Vào thẳng
+URL form (dán link) thì không có `state.from`, lúc đó rơi về danh sách mặc định.
+
+**Tách một khoản làm hai.** `POST /api/transactions/:id/split` cắt một phần số tiền
+ra thành giao dịch mới và trừ đúng chừng ấy ở khoản gốc — hoá đơn siêu thị 1 triệu
+chia thành 600k thực phẩm và 400k đồ gia dụng, thay vì xoá đi nhập lại hai khoản và
+mất luôn ngày giờ lẫn người nhập của bản ghi cũ. Mảnh cắt ra **thừa kế chiều thu/chi,
+tính chất, ngày và hạn** của khoản gốc: tách chỉ chia nhỏ một sự việc đã xảy ra nên
+tổng hai mảnh luôn bằng số tiền ban đầu và mọi số liệu tổng hợp không đổi (chỉ số
+lượng bản ghi tăng). Riêng nội dung, danh mục, bên nhận và hình thức thì đặt riêng
+được — đó mới là chỗ hai mảnh khác nhau.
+
+Khoản gốc **không bao giờ tụt xuống 0**: route so trước khi ghi, còn `CHECK (amount > 0)`
+trong schema là chốt chặn cho trường hợp hai người tách cùng lúc. Hai câu lệnh đi
+chung một D1 batch (batch là một transaction) nên hoặc cả hai cùng xong, hoặc không
+gì xảy ra — dừng ở giữa thì hoặc tiền bốc hơi, hoặc tự nhiên có thêm tiền. Câu UPDATE
+cố tình *không* kèm điều kiện `amount > ?`: điều kiện WHERE không khớp chỉ lặng lẽ đổi
+0 dòng trong khi câu INSERT vẫn chạy, còn ràng buộc CHECK thì làm hỏng cả batch và
+quay lui.
 
 **Sửa danh mục không đụng vào giao dịch.** Đổi tên hay biểu tượng chỉ ghi lại hàng
 `categories`, mọi giao dịch vẫn trỏ theo `category_id` nên lịch sử giữ nguyên. Loại

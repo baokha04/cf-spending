@@ -607,6 +607,73 @@ export async function softDeleteTransaction(
   return (res.meta.changes ?? 0) > 0;
 }
 
+/** Phần cắt ra khi tách một khoản; những gì không nói ở đây thì thừa kế khoản gốc. */
+export interface SplitInput {
+  amount: number;
+  note: string;
+  detail: string;
+  payee: string;
+  paymentMethod: PaymentMethod | null;
+  categoryId: string | null;
+}
+
+/**
+ * Tách một khoản làm hai: trừ số tiền ở khoản gốc và tạo khoản mới, trong đúng
+ * một D1 batch (batch là một transaction).
+ *
+ * Đi chung một transaction vì hai câu này chỉ đúng khi cùng thành công: dừng ở
+ * giữa thì hoặc tiền bốc hơi, hoặc tự nhiên có thêm tiền. Câu UPDATE cố tình
+ * không kèm điều kiện `amount > ?`: CHECK (amount > 0) trong schema mới là chốt
+ * chặn đúng đắn — nó làm cả batch hỏng và quay lui, còn một điều kiện WHERE
+ * không khớp thì chỉ lặng lẽ đổi 0 dòng mà câu INSERT vẫn chạy.
+ */
+export async function splitTransaction(
+  db: D1Database,
+  householdId: string,
+  source: Transaction,
+  userId: string,
+  input: SplitInput,
+  now: number,
+  embedStatus: 'pending' | 'skipped',
+): Promise<string> {
+  const id = newId();
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE transactions SET amount = amount - ?, updated_at = ?, embed_status = ?
+         WHERE household_id = ? AND id = ? AND deleted_at IS NULL`,
+      )
+      .bind(input.amount, now, embedStatus, householdId, source.id),
+    db
+      .prepare(
+        `INSERT INTO transactions
+           (id, household_id, created_by, occurred_on, note, detail, payee, payment_method,
+            amount, direction, recurrence, expires_on, category_id, embed_status,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        id,
+        householdId,
+        userId,
+        source.occurredOn,
+        input.note,
+        input.detail,
+        input.payee,
+        input.paymentMethod ?? '',
+        input.amount,
+        source.direction,
+        source.recurrence,
+        source.expiresOn,
+        input.categoryId,
+        embedStatus,
+        now,
+        now,
+      ),
+  ]);
+  return id;
+}
+
 /**
  * Các khoản có hạn tới trước hoặc đúng ngày `through`, cũ nhất đứng trước.
  *

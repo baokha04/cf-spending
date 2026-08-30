@@ -134,6 +134,30 @@ export const transactionUpdateSchema = z
   .refine((v) => Object.keys(v).length > 0, { message: 'Không có trường nào để cập nhật' });
 
 /**
+ * Tách một khoản làm hai: `amount` là phần cắt ra thành giao dịch mới, phần còn
+ * lại ở nguyên khoản gốc.
+ *
+ * Chiều thu/chi, tính chất, ngày và hạn đều thừa kế từ khoản gốc nên không có ở
+ * đây: tách là chia nhỏ đúng một sự việc đã xảy ra, tổng của hai mảnh phải bằng
+ * số tiền ban đầu. Muốn đổi những thứ đó thì sửa từng khoản sau khi tách.
+ *
+ * Ràng buộc "phần còn lại vẫn lớn hơn 0" không kiểm được ở đây vì schema không
+ * biết số tiền gốc; route so trước khi ghi, và CHECK (amount > 0) trong database
+ * là chốt chặn cuối nếu có hai người tách cùng lúc.
+ */
+export const transactionSplitSchema = z.object({
+  amount: amountSchema,
+  note: z.string().trim().max(500).optional(),
+  detail: detailSchema.optional(),
+  payee: payeeSchema.optional(),
+  paymentMethod: paymentMethodSchema,
+  categoryId: z.string().trim().min(1).nullish(),
+});
+
+export const SPLIT_TOO_LARGE_MESSAGE =
+  'Số tiền tách phải nhỏ hơn số tiền của khoản gốc, để khoản gốc còn lại lớn hơn 0';
+
+/**
  * Danh sách nhắc gia hạn. `days` là cửa sổ nhắc: 0 nghĩa là chỉ những khoản
  * hết hạn hôm nay trở về trước.
  */

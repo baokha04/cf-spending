@@ -1,60 +1,37 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ExpiringTransaction } from '../../shared/types';
 import { RENEW_MONTH_OPTIONS, addMonths, renewBaseDate } from '../../shared/expiry';
 import { api } from '../lib/api';
+import { useExpiry } from '../lib/expiry-context';
 import { expiryPillLabel, fullDateLabel, money } from '../lib/format';
 
 interface Props {
-  /**
-   * Đổi giá trị này để bắt tải lại — trang nào sửa giao dịch xong cũng nên tăng
-   * nó lên, nếu không danh sách nhắc vẫn còn khoản vừa được gia hạn.
-   */
-  reloadToken?: number;
   /** Gọi sau khi gia hạn hoặc bỏ hạn, để trang chủ quản tải lại số liệu của nó. */
   onChanged?: () => void;
 }
 
-/** Số khoản hiện thẳng ra; phần còn lại gộp thành một dòng đếm. */
+/** Số khoản hiện thẳng ra; phần còn lại nằm sau nút "Xem thêm". */
 const VISIBLE = 6;
 
 /**
  * Nhắc gia hạn: các khoản đã quá hạn và các khoản hết hạn trong một tuần tới.
  *
- * Tự gọi API chứ không nhận dữ liệu từ trang cha, vì nó xuất hiện ở nhiều trang
- * và ở đâu cũng phải nói cùng một chuyện. Không có khoản nào cần nhắc thì
- * component không vẽ gì cả — một thẻ trống mỗi ngày sẽ dạy người dùng bỏ qua nó.
+ * Dữ liệu lấy từ ExpiryProvider chứ không tự gọi API, để thẻ này và con số trên
+ * chuông không bao giờ lệch nhau. Không có khoản nào cần nhắc thì component
+ * không vẽ gì cả — một thẻ trống mỗi ngày sẽ dạy người dùng bỏ qua nó.
  */
-export function ExpiryAlert({ reloadToken = 0, onChanged }: Props) {
-  const [items, setItems] = useState<ExpiringTransaction[]>([]);
-  const [today, setToday] = useState('');
-  const [days, setDays] = useState(7);
+export function ExpiryAlert({ onChanged }: Props) {
+  const { data, overdueCount, soonCount, refresh } = useExpiry();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await api.expiringTransactions();
-      setToday(res.today);
-      setDays(res.days);
-      // Quá hạn lên trước: đó là phần đang thực sự hỏng, không phải phần sắp tới.
-      setItems([...res.overdue, ...res.soon]);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không tải được danh sách cần gia hạn');
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load, reloadToken]);
 
   async function apply(item: ExpiringTransaction, expiresOn: string | null) {
     setBusyId(item.transaction.id);
     setError(null);
     try {
       await api.updateTransaction(item.transaction.id, { expiresOn });
-      await load();
+      await refresh();
       onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không gia hạn được');
@@ -63,11 +40,12 @@ export function ExpiryAlert({ reloadToken = 0, onChanged }: Props) {
     }
   }
 
-  if (error && items.length === 0) return <div className="alert error">{error}</div>;
+  if (!data) return null;
+  // Quá hạn lên trước: đó là phần đang thực sự hỏng, không phải phần sắp tới.
+  const items = [...data.overdue, ...data.soon];
   if (items.length === 0) return null;
 
-  const overdueCount = items.filter((i) => i.daysLeft < 0).length;
-  const soonCount = items.length - overdueCount;
+  const today = data.today;
   const shown = showAll ? items : items.slice(0, VISIBLE);
 
   return (
@@ -76,7 +54,7 @@ export function ExpiryAlert({ reloadToken = 0, onChanged }: Props) {
       <p className="card-sub">
         {overdueCount > 0 && `${overdueCount} khoản đã quá hạn`}
         {overdueCount > 0 && soonCount > 0 && ' · '}
-        {soonCount > 0 && `${soonCount} khoản hết hạn trong ${days} ngày tới`}
+        {soonCount > 0 && `${soonCount} khoản hết hạn trong ${data.days} ngày tới`}
       </p>
 
       {error && <div className="alert error">{error}</div>}

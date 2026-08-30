@@ -1,11 +1,15 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth-context';
+import { ExpiryProvider } from './lib/expiry-context';
+import { ExpiryBell } from './components/ExpiryBell';
 import { useTheme } from './lib/theme';
 import { THEME_LABEL, nextMode } from '../shared/theme';
 import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
+import { TransactionEditor } from './pages/TransactionEditor';
 import { LargeTransactions } from './pages/LargeTransactions';
 import { Categories } from './pages/Categories';
+import { CategoryEditor } from './pages/CategoryEditor';
 import { Schedule } from './pages/Schedule';
 import { MemberSchedule } from './pages/MemberSchedule';
 import { Household } from './pages/Household';
@@ -171,6 +175,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <span className="who">
           {me?.user.displayName} · {me?.household.name}
         </span>
+        <ExpiryBell />
         <ThemeToggle />
         <button type="button" className="ghost" onClick={() => void logout()}>
           Đăng xuất
@@ -213,21 +218,32 @@ function GuestOnly({ children }: { children: React.ReactNode }) {
 export function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/dang-nhap" element={<GuestOnly><Login /></GuestOnly>} />
-        <Route path="/dang-ky" element={<GuestOnly><Register /></GuestOnly>} />
-        <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
-        <Route path="/giao-dich" element={<RequireAuth><Transactions /></RequireAuth>} />
-        <Route path="/khoan-lon" element={<RequireAuth><LargeTransactions /></RequireAuth>} />
-        <Route path="/lich" element={<RequireAuth><Schedule /></RequireAuth>} />
-        {/* Lịch riêng của một người; NAV không có mục này, vào từ lịch cả nhà
-            hoặc từ trang Hộ gia đình. */}
-        <Route path="/lich/:memberId" element={<RequireAuth><MemberSchedule /></RequireAuth>} />
-        <Route path="/danh-muc" element={<RequireAuth><Categories /></RequireAuth>} />
-        <Route path="/hoi-dap" element={<RequireAuth><Ask /></RequireAuth>} />
-        <Route path="/ho-gia-dinh" element={<RequireAuth><Household /></RequireAuth>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      {/* Nguồn dữ liệu nhắc gia hạn nằm ngoài <Routes> để nó không nạp lại mỗi
+          lần chuyển trang; bên trong nó tự chờ đăng nhập xong mới hỏi API. */}
+      <ExpiryProvider>
+        <Routes>
+          <Route path="/dang-nhap" element={<GuestOnly><Login /></GuestOnly>} />
+          <Route path="/dang-ky" element={<GuestOnly><Register /></GuestOnly>} />
+          <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
+          <Route path="/giao-dich" element={<RequireAuth><Transactions /></RequireAuth>} />
+          {/* Mỗi việc nhập liệu là một màn hình riêng, không nằm cạnh danh sách. */}
+          <Route path="/giao-dich/them" element={<RequireAuth><TransactionEditor mode="create" /></RequireAuth>} />
+          <Route path="/giao-dich/:id/sua" element={<RequireAuth><TransactionEditor mode="edit" /></RequireAuth>} />
+          <Route path="/giao-dich/:id/sao-chep" element={<RequireAuth><TransactionEditor mode="copy" /></RequireAuth>} />
+          <Route path="/giao-dich/:id/tach" element={<RequireAuth><TransactionEditor mode="split" /></RequireAuth>} />
+          <Route path="/khoan-lon" element={<RequireAuth><LargeTransactions /></RequireAuth>} />
+          <Route path="/lich" element={<RequireAuth><Schedule /></RequireAuth>} />
+          {/* Lịch riêng của một người; NAV không có mục này, vào từ lịch cả nhà
+              hoặc từ trang Hộ gia đình. */}
+          <Route path="/lich/:memberId" element={<RequireAuth><MemberSchedule /></RequireAuth>} />
+          <Route path="/danh-muc" element={<RequireAuth><Categories /></RequireAuth>} />
+          <Route path="/danh-muc/them" element={<RequireAuth><CategoryEditor mode="create" /></RequireAuth>} />
+          <Route path="/danh-muc/:id/sua" element={<RequireAuth><CategoryEditor mode="edit" /></RequireAuth>} />
+          <Route path="/hoi-dap" element={<RequireAuth><Ask /></RequireAuth>} />
+          <Route path="/ho-gia-dinh" element={<RequireAuth><Household /></RequireAuth>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ExpiryProvider>
     </AuthProvider>
   );
 }

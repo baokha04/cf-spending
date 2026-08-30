@@ -199,6 +199,41 @@ a { color: var(--focus); }
   flex: none;
 }
 
+/* Chuông nhắc gia hạn. Kích thước bằng nút giao diện bên cạnh để hai biểu tượng
+   trên thanh trên cùng thẳng hàng; position: relative để treo huy hiệu vào góc. */
+.bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+.bell:hover { background: var(--surface-2); color: var(--text-primary); }
+/* Có khoản trễ thì chính cái chuông cũng đổi màu, không chỉ mỗi huy hiệu — nhìn
+   lướt qua là thấy, không cần đọc con số. */
+.bell.has-overdue { color: var(--critical); }
+
+.bell-badge {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--critical);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .navlink {
   padding: 6px 11px;
   border-radius: 8px;
@@ -227,6 +262,23 @@ main {
   flex-wrap: wrap;
 }
 
+/* Câu mô tả ngay dưới tiêu đề trang — nói màn hình này làm gì. */
+.page-sub { margin: 2px 0 0; color: var(--text-secondary); font-size: 0.88rem; }
+
+/* Đường lui từ một màn hình form về danh sách của nó. */
+.back-link {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.back-link:hover { color: var(--text-primary); text-decoration: underline; }
+
+/* Thẻ chứa một form đứng riêng cả màn hình. Không cho nó kéo ngang hết 1400px:
+   ô nhập dài quá thì mắt phải chạy từ nhãn sang tận cuối dòng mới thấy chỗ gõ. */
+.form-page { max-width: 560px; }
+
 /* ------------------------------------------------------------------- cards */
 
 .card {
@@ -251,8 +303,6 @@ main {
 .grid > * { min-width: 0; }
 .grid-kpi { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .grid-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-/* Cột form + cột danh sách ở trang Giao dịch. */
-.grid-form { grid-template-columns: minmax(280px, 340px) 1fr; align-items: start; }
 
 /* --------------------------------------------------------------- stat tile */
 
@@ -295,9 +345,6 @@ tbody tr:hover { background: var(--surface-2); }
 .col-grow { width: 100%; }
 .col-tight { white-space: nowrap; width: 1%; }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
-/* Khi trong bảng có bảng chọn nổi lên, cuộn ngang sẽ cắt mất nó. Lúc đó dòng
-   đang sửa đã thay chỗ cho hàng dữ liệu nên bỏ cuộn cũng không mất gì. */
-.table-scroll.popover-open { overflow: visible; }
 
 /* Bảng dữ liệu kèm biểu đồ — kênh truy cập thay thế cho màu sắc. */
 details.table-view { margin-top: 12px; }
@@ -326,7 +373,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus); out
 .field { margin-bottom: 12px; }
 .field-row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 
-button {
+/* .button-link là thẻ <a> nhưng trông và hành xử như nút: dùng cho những thao
+   tác thật ra là điều hướng (mở màn hình form). Là <a> nên vẫn mở được tab mới,
+   sao chép được địa chỉ — thứ mà một <button> gọi navigate() không làm được. */
+button, .button-link {
   font: inherit;
   font-size: 0.9rem;
   font-weight: 550;
@@ -337,12 +387,28 @@ button {
   color: var(--text-primary);
   cursor: pointer;
 }
-button:hover:not(:disabled) { border-color: var(--axis); }
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+button:hover:not(:disabled), .button-link:hover { border-color: var(--axis); }
 button:disabled { opacity: 0.55; cursor: not-allowed; }
-button.primary { background: var(--focus); border-color: transparent; color: #fff; }
-button.primary:hover:not(:disabled) { filter: brightness(1.08); }
-button.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); padding: 4px 8px; }
-button.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text-primary); }
+button.primary, .button-link.primary { background: var(--focus); border-color: transparent; color: #fff; }
+button.primary:hover:not(:disabled), .button-link.primary:hover { filter: brightness(1.08); }
+button.ghost, .button-link.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+}
+button.ghost:hover:not(:disabled), .button-link.ghost:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border-color: transparent;
+}
 button.danger { color: var(--critical); }
 
 .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -585,6 +651,21 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
 .expiry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .expiry-actions button { min-height: 32px; padding: 4px 10px; font-size: 0.82rem; }
 .expiry-actions-label { font-size: 0.8rem; color: var(--text-secondary); }
+
+/* --------------------------------------------------------- tách giao dịch */
+
+/* Tóm tắt khoản gốc, đặt ngay đầu form tách: đang cắt từ đâu ra phải nhìn thấy
+   suốt lúc gõ số tiền, không phải nhớ lại từ bảng bên cạnh. */
+.split-source {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.split-source-head { display: flex; align-items: baseline; gap: 12px; }
+.split-source-note { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.split-source-head > :last-child { margin-left: auto; white-space: nowrap; }
 
 /* ------------------------------------------------------------ khoản lớn */
 
@@ -1083,7 +1164,6 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   /* Một cột cho mọi lưới — 402pt không đủ cho hai thẻ cạnh nhau. */
   .grid-kpi { grid-template-columns: 1fr; }
   .grid-2 { grid-template-columns: 1fr; }
-  .grid-form { grid-template-columns: 1fr; }
   .grid { gap: 12px; }
 
   .card { padding: 14px; border-radius: 12px; }
@@ -1101,11 +1181,13 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   input[type='checkbox'], input[type='radio'] { min-height: 0; }
 
   /* Mọi nút đều đạt cỡ chạm tối thiểu. */
-  button { min-height: var(--tap); padding: 10px 14px; }
-  button.ghost { min-height: 38px; padding: 8px 10px; }
+  button, .button-link { min-height: var(--tap); padding: 10px 14px; }
+  button.ghost, .button-link.ghost { min-height: 38px; padding: 8px 10px; }
   /* Topbar trên 393pt chỉ còn tên app + nút này + Đăng xuất, nên nút phải đạt
      cỡ chạm mà vẫn không đẩy nút Đăng xuất xuống dòng. */
   .theme-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; }
+  .bell { width: var(--tap); height: var(--tap); }
+  .bell-badge { top: 5px; right: 4px; }
   .segmented { width: 100%; }
   .segmented button { flex: 1 1 0; }
 
