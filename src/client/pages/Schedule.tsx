@@ -53,6 +53,7 @@ export function Schedule() {
   const [allMembers, setAllMembers] = useState<FamilyMember[]>([]);
   const [picked, setPicked] = useState<Occurrence | null>(null);
   const [editing, setEditing] = useState<Activity | null>(null);
+  const [copying, setCopying] = useState<Activity | null>(null);
   const [adding, setAdding] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -120,6 +121,8 @@ export function Schedule() {
       else await api.createActivity(body);
       setEditing(null);
       setAdding(false);
+      if (copying) setNotice(`Đã tạo bản sao từ "${copying.title}".`);
+      setCopying(null);
     }, 'Không lưu được hoạt động');
   }
 
@@ -328,17 +331,26 @@ export function Schedule() {
           membersById={membersById}
           adding={adding}
           editing={editing}
+          copying={copying}
           onAdd={() => {
             setAdding(true);
             setEditing(null);
+            setCopying(null);
           }}
           onEdit={(a) => {
             setEditing(a);
+            setAdding(false);
+            setCopying(null);
+          }}
+          onCopy={(a) => {
+            setCopying(a);
+            setEditing(null);
             setAdding(false);
           }}
           onCancelForm={() => {
             setAdding(false);
             setEditing(null);
+            setCopying(null);
           }}
           onSubmit={saveActivity}
           onRemove={removeActivity}

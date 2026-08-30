@@ -192,6 +192,10 @@ export const api = {
     request<{ deleted: boolean }>(`/activities/${id}`, { method: 'DELETE' }),
   restoreActivity: (id: string) => post<Activity>(`/activities/${id}/restore`),
 
+  /** Chép cả lịch của một người sang một người khác; ngoại lệ không đi theo. */
+  copySchedule: (body: { fromMemberId: string; toMemberId: string }) =>
+    post<{ copied: number; fromName: string; toName: string }>('/activities/copy', body),
+
   exceptions: (activityId: string) =>
     request<{ exceptions: ActivityException[] }>(`/activities/${activityId}/exceptions`),
   addException: (activityId: string, body: ExceptionInput) =>
