@@ -12,6 +12,13 @@ interface Props {
   membersById: Map<string, FamilyMember>;
   today: string;
   onPick: (occurrence: Occurrence) => void;
+  /**
+   * Bỏ tên người khỏi mặt khối — chỉ dùng khi cả lưới là của đúng một người
+   * (màn hình lịch riêng), lúc đó tên đã nằm ở tiêu đề trang nên in lại vào khối
+   * là thừa mà còn ăn mất một dòng. Lịch cả nhà thì luôn phải có tên: màu không
+   * bao giờ là tín hiệu duy nhất.
+   */
+  hideMember?: boolean;
 }
 
 /**
@@ -21,7 +28,14 @@ interface Props {
  * buổi là một khối định vị tuyệt đối theo tỷ lệ phần trăm của cửa sổ giờ, nên
  * lưới co giãn theo chiều cao mà không phải tính lại gì.
  */
-export function WeekGrid({ weekStart, occurrences, membersById, today, onPick }: Props) {
+export function WeekGrid({
+  weekStart,
+  occurrences,
+  membersById,
+  today,
+  onPick,
+  hideMember = false,
+}: Props) {
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i)),
     [weekStart],
@@ -134,12 +148,15 @@ export function WeekGrid({ weekStart, occurrences, membersById, today, onPick }:
                   title={label}
                   onClick={() => onPick(occ)}
                 >
-                  {/* Tên người luôn có mặt: màu không bao giờ là tín hiệu duy nhất. */}
-                  <span className="occ-who">
-                    {member?.icon ? `${member.icon} ` : ''}
-                    {member?.nickname || member?.name || '—'}
-                  </span>
-                  <span className="occ-title">{occ.title}</span>
+                  {/* Trên lịch cả nhà, tên người luôn có mặt: màu không bao giờ
+                      là tín hiệu duy nhất. aria-label thì giữ tên ở cả hai chế độ. */}
+                  {!hideMember && (
+                    <span className="occ-who">
+                      {member?.icon ? `${member.icon} ` : ''}
+                      {member?.nickname || member?.name || '—'}
+                    </span>
+                  )}
+                  <span className={hideMember ? 'occ-who' : 'occ-title'}>{occ.title}</span>
                   <span className="occ-time">
                     {placed.isTail ? `→ ${occ.endTime}` : toTimeLabel(placed.startMinute)}
                   </span>

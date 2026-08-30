@@ -7,6 +7,7 @@ import { Transactions } from './pages/Transactions';
 import { LargeTransactions } from './pages/LargeTransactions';
 import { Categories } from './pages/Categories';
 import { Schedule } from './pages/Schedule';
+import { MemberSchedule } from './pages/MemberSchedule';
 import { Household } from './pages/Household';
 import { Ask } from './pages/Ask';
 import { Login } from './pages/Login';
@@ -219,6 +220,9 @@ export function App() {
         <Route path="/giao-dich" element={<RequireAuth><Transactions /></RequireAuth>} />
         <Route path="/khoan-lon" element={<RequireAuth><LargeTransactions /></RequireAuth>} />
         <Route path="/lich" element={<RequireAuth><Schedule /></RequireAuth>} />
+        {/* Lịch riêng của một người; NAV không có mục này, vào từ lịch cả nhà
+            hoặc từ trang Hộ gia đình. */}
+        <Route path="/lich/:memberId" element={<RequireAuth><MemberSchedule /></RequireAuth>} />
         <Route path="/danh-muc" element={<RequireAuth><Categories /></RequireAuth>} />
         <Route path="/hoi-dap" element={<RequireAuth><Ask /></RequireAuth>} />
         <Route path="/ho-gia-dinh" element={<RequireAuth><Household /></RequireAuth>} />

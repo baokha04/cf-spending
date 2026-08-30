@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { FamilyMember, FamilyRelation, Member, MemberColor } from '../../shared/types';
 import { api } from '../lib/api';
 import {
@@ -338,6 +339,9 @@ export function FamilyMembers({ accounts }: Props) {
                   </button>
                 ) : (
                   <>
+                    <Link className="navlink" to={`/lich/${m.id}`}>
+                      Lịch riêng
+                    </Link>
                     <button type="button" className="ghost" onClick={() => startEdit(m)}>
                       Sửa
                     </button>
