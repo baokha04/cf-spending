@@ -4,6 +4,7 @@ import { daysUntil, needsRenewal } from '../../shared/expiry';
 import { api } from '../lib/api';
 import { RECURRENCE_LABEL, expiryPillLabel, fullDateLabel, money, todayISO } from '../lib/format';
 import { useIsPhone } from '../lib/use-media-query';
+import { ActionIcon } from './icons';
 import { TransactionDetails, hasExtraInfo } from './TransactionDetails';
 
 interface Props {
@@ -97,70 +98,73 @@ export function TransactionTable({
     );
   };
 
-  const detailsButton = (tx: Transaction) => (
+  /**
+   * Các nút thao tác chỉ còn biểu tượng: năm nút chữ trên mỗi dòng đẩy bảng rộng
+   * hơn cả khung chứa, mà trên điện thoại thì chiếm gần trọn một thẻ. Nhãn không
+   * mất đi, nó chuyển vào `aria-label` (cho trình đọc màn hình) và `title` (hiện
+   * ra khi rê chuột), nên không ai phải đoán biểu tượng nghĩa là gì.
+   */
+  const iconButton = (
+    label: string,
+    name: Parameters<typeof ActionIcon>[0]['name'],
+    onClick: () => void,
+    extra?: { className?: string; disabled?: boolean; title?: string; expanded?: boolean },
+  ) => (
     <button
       type="button"
-      className="ghost"
-      aria-expanded={expanded.has(tx.id)}
-      onClick={() => toggleDetails(tx.id)}
-      title={hasExtraInfo(tx) ? 'Xem thông tin chi tiết' : 'Khoản này chưa ghi chi tiết'}
+      className={`ghost icon-button${extra?.className ? ` ${extra.className}` : ''}`}
+      aria-label={label}
+      title={extra?.title ?? label}
+      aria-expanded={extra?.expanded}
+      disabled={extra?.disabled}
+      onClick={onClick}
     >
-      {expanded.has(tx.id) ? 'Ẩn' : 'Chi tiết'}
-      {hasExtraInfo(tx) && <span className="has-detail" aria-label="đã có chi tiết" />}
+      <ActionIcon name={name} />
     </button>
   );
+
+  const detailsButton = (tx: Transaction) => {
+    const open = expanded.has(tx.id);
+    return (
+      <button
+        type="button"
+        className="ghost icon-button"
+        aria-expanded={open}
+        aria-label={open ? 'Ẩn chi tiết' : 'Xem chi tiết'}
+        onClick={() => toggleDetails(tx.id)}
+        title={hasExtraInfo(tx) ? 'Xem thông tin chi tiết' : 'Khoản này chưa ghi chi tiết'}
+      >
+        <ActionIcon name={open ? 'collapse' : 'expand'} />
+        {hasExtraInfo(tx) && <span className="has-detail" aria-label="đã có chi tiết" />}
+      </button>
+    );
+  };
 
   // Dòng đã xoá chỉ còn xem chi tiết và khôi phục; sửa hay xoá tiếp đều vô nghĩa.
   const actions = (tx: Transaction) =>
     tx.deletedAt !== null ? (
       <>
         {detailsButton(tx)}
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => void restore(tx)}
-          disabled={busyId === tx.id}
-        >
-          Khôi phục
-        </button>
+        {iconButton('Khôi phục', 'restore', () => void restore(tx), { disabled: busyId === tx.id })}
       </>
     ) : (
       <>
         {detailsButton(tx)}
-        {onCopy && (
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => onCopy(tx)}
-            title="Điền sẵn form với nội dung của giao dịch này"
-          >
-            Sao chép
-          </button>
-        )}
+        {onCopy &&
+          iconButton('Sao chép', 'copy', () => onCopy(tx), {
+            title: 'Sao chép — điền sẵn form với nội dung của giao dịch này',
+          })}
         {/* Tách được thì khoản đó phải chia ra được thành hai phần đều lớn hơn 0. */}
-        {onSplit && tx.amount > 1 && (
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => onSplit(tx)}
-            title="Cắt một phần số tiền ra thành giao dịch riêng"
-          >
-            Tách
-          </button>
-        )}
-        {onEdit && (
-          <button type="button" className="ghost" onClick={() => onEdit(tx)}>
-            Sửa
-          </button>
-        )}
-        <button
-          type="button"
-          className="ghost danger"
-          onClick={() => void remove(tx)}
-          disabled={busyId === tx.id}
-        >
-          Xoá
-        </button>
+        {onSplit &&
+          tx.amount > 1 &&
+          iconButton('Tách', 'split', () => onSplit(tx), {
+            title: 'Tách — cắt một phần số tiền ra thành giao dịch riêng',
+          })}
+        {onEdit && iconButton('Sửa', 'edit', () => onEdit(tx))}
+        {iconButton('Xoá', 'delete', () => void remove(tx), {
+          className: 'danger',
+          disabled: busyId === tx.id,
+        })}
       </>
     );
 

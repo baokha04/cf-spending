@@ -370,6 +370,40 @@ input, select, textarea {
   border-radius: 8px;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus); outline-offset: -1px; border-color: transparent; }
+
+/* Ô ngày, tháng, giờ.
+
+   Safari trên iOS không coi chúng như <input type=text>: nó tự đặt một bề rộng
+   nội tại theo nội dung và canh giữa giá trị bên trong. Trong khung 402pt của
+   iPhone 16 Pro, ô "31/12/2026" cộng nút lịch vượt quá cột chứa nó, đội cả hàng
+   .field-row rộng ra rồi tràn; chữ thì lệch hẳn so với mọi ô nhập khác ngay bên
+   trên. Bốn khối dưới đây ép chúng nằm gọn trong hộp của mình như các ô còn lại.
+   Bỏ appearance mặc định không làm mất bộ chọn ngày: chạm vào vẫn ra bánh xe
+   chọn ngày của hệ điều hành. */
+input[type='date'],
+input[type='month'],
+input[type='time'] {
+  -webkit-appearance: none;
+  appearance: none;
+  /* Mặc định là bề rộng nội tại của nội dung — thứ khiến ô không co lại được. */
+  min-width: 0;
+}
+/* Và đừng kéo hết bề ngang: một ngày chỉ cần chỗ cho 'dd/mm/yyyy' với nút lịch.
+   Trên màn 402pt của iPhone 16 Pro, ô dài suốt màn hình vừa huếch vừa biến cả
+   dải trống thành vùng chạm mở bộ chọn ngày. 12rem đủ rộng cho cách Safari vẽ
+   ngày (rộng hơn Chrome một chút) mà vẫn gọn trong cột hẹp nhất của .field-row. */
+input[type='date'], input[type='month'] { max-width: 12rem; }
+input[type='time'] { max-width: 9rem; }
+input[type='date']::-webkit-date-and-time-value,
+input[type='month']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+}
+/* Safari chèn thêm lề trong quanh phần ngày/tháng/năm; padding của ô lo đủ rồi. */
+::-webkit-datetime-edit { padding: 0; }
+/* Nút mở lịch: giữ nguyên cỡ chạm nhưng đừng đẩy bề rộng ô ra thêm. */
+::-webkit-calendar-picker-indicator { margin: 0 0 0 4px; flex: none; }
 .field { margin-bottom: 12px; }
 .field-row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 
@@ -501,15 +535,28 @@ button.danger { color: var(--critical); }
 
 .pill.warn { color: var(--critical); border-color: var(--critical); }
 
+/* Nút thao tác trên từng dòng: chỉ còn biểu tượng nên ép về ô vuông, không co
+   theo nội dung. position:relative để treo chấm "đã có chi tiết" vào góc. */
+.icon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  vertical-align: middle;
+}
+
 /* Chấm nhỏ trên nút "Chi tiết" báo khoản đó đã ghi thông tin bổ sung. */
 .has-detail {
-  display: inline-block;
+  position: absolute;
+  top: 5px;
+  right: 5px;
   width: 6px;
   height: 6px;
-  margin-left: 5px;
   border-radius: 999px;
   background: var(--focus);
-  vertical-align: middle;
 }
 
 .tx-details {
@@ -1183,6 +1230,8 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   /* Mọi nút đều đạt cỡ chạm tối thiểu. */
   button, .button-link { min-height: var(--tap); padding: 10px 14px; }
   button.ghost, .button-link.ghost { min-height: 38px; padding: 8px 10px; }
+  /* Nút biểu tượng: ô vuông đúng cỡ chạm tối thiểu của Apple HIG. */
+  button.icon-button { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; }
   /* Topbar trên 393pt chỉ còn tên app + nút này + Đăng xuất, nên nút phải đạt
      cỡ chạm mà vẫn không đẩy nút Đăng xuất xuống dòng. */
   .theme-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; }
