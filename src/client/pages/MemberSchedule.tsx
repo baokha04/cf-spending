@@ -11,6 +11,7 @@ import {
   fullDateLabel,
   startOfWeekISO,
   todayISO,
+  weekNumberLabel,
   weekRangeLabel,
 } from '../lib/format';
 import { memberColorVar } from '../lib/schedule';
@@ -37,6 +38,13 @@ export function MemberSchedule() {
   const today = todayISO();
 
   const [weekStart, setWeekStart] = useState(() => startOfWeekISO(today));
+
+  // Như trang lịch cả nhà: nút mang số tuần, và nút "về tuần này" giấu đi khi nó
+  // trùng đúng nút lùi hoặc nút tiến.
+  const thisWeek = startOfWeekISO(today);
+  const prevWeek = addDaysISO(weekStart, -7);
+  const nextWeek = addDaysISO(weekStart, 7);
+  const showTodayWeek = thisWeek !== prevWeek && thisWeek !== nextWeek;
   /**
    * Dữ liệu đi kèm id của người nó thuộc về. Đổi người xong mà chưa tải xong thì
    * `loaded.memberId` còn là người cũ — không có mốc này, thống kê và lưới của
@@ -232,7 +240,7 @@ export function MemberSchedule() {
           </h1>
           <p style={{ margin: '2px 0 0', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
             {member && `${FAMILY_RELATION_LABEL[member.relation]} · `}
-            {weekRangeLabel(range.from, range.to)}
+            {weekNumberLabel(weekStart)} · {weekRangeLabel(range.from, range.to)}
           </p>
         </div>
         <Link className="navlink" to="/lich">
@@ -278,14 +286,21 @@ export function MemberSchedule() {
       <section className="card">
         <div className="toolbar" style={{ marginBottom: 12 }}>
           <div className="segmented">
-            <button type="button" onClick={() => setWeekStart(addDaysISO(weekStart, -7))}>
-              ← Tuần trước
+            <button type="button" onClick={() => setWeekStart(prevWeek)}>
+              {weekNumberLabel(prevWeek, weekStart)}
             </button>
-            <button type="button" onClick={() => setWeekStart(startOfWeekISO(today))}>
-              Tuần này
-            </button>
-            <button type="button" onClick={() => setWeekStart(addDaysISO(weekStart, 7))}>
-              Tuần sau →
+            {showTodayWeek && (
+              <button
+                type="button"
+                aria-pressed={weekStart === thisWeek}
+                title="Về tuần chứa hôm nay"
+                onClick={() => setWeekStart(thisWeek)}
+              >
+                {weekNumberLabel(today, weekStart)}
+              </button>
+            )}
+            <button type="button" onClick={() => setWeekStart(nextWeek)}>
+              {weekNumberLabel(nextWeek, weekStart)}
             </button>
           </div>
         </div>

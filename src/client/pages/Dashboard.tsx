@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DashboardSummary } from '../../shared/types';
 import { api } from '../lib/api';
-import { currentMonthISO, money, monthLabel, shiftMonth } from '../lib/format';
+import {
+  currentMonthISO,
+  money,
+  monthLabel,
+  monthNumberLabel,
+  shiftMonth,
+} from '../lib/format';
 import { KpiCard } from '../components/KpiCard';
 import { CategoryChart, IncomeExpenseChart, PaceChart, RecurrenceChart } from '../components/charts';
 import { ChartCard } from '../components/viz';
@@ -45,14 +51,14 @@ export function Dashboard() {
         <div className="toolbar" style={{ marginBottom: 0 }}>
           <div className="segmented">
             <button type="button" onClick={() => setMonth(shiftMonth(month, -1))}>
-              ← Tháng trước
+              {monthNumberLabel(shiftMonth(month, -1), month)}
             </button>
             <button
               type="button"
               onClick={() => setMonth(shiftMonth(month, 1))}
               disabled={month >= thisMonth}
             >
-              Tháng sau →
+              {monthNumberLabel(shiftMonth(month, 1), month)}
             </button>
           </div>
           <input

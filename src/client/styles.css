@@ -1231,7 +1231,13 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   button, .button-link { min-height: var(--tap); padding: 10px 14px; }
   button.ghost, .button-link.ghost { min-height: 38px; padding: 8px 10px; }
   /* Nút biểu tượng: ô vuông đúng cỡ chạm tối thiểu của Apple HIG. */
-  button.icon-button { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; }
+  button.icon-button,
+  .button-link.icon-button {
+    width: var(--tap);
+    height: var(--tap);
+    min-height: var(--tap);
+    padding: 0;
+  }
   /* Topbar trên 393pt chỉ còn tên app + nút này + Đăng xuất, nên nút phải đạt
      cỡ chạm mà vẫn không đẩy nút Đăng xuất xuống dòng. */
   .theme-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; }

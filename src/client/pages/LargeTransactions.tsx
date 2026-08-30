@@ -15,6 +15,7 @@ import {
   fullDateLabel,
   money,
   monthLabel,
+  monthNumberLabel,
   shareLabel,
   shiftMonth,
 } from '../lib/format';
@@ -83,14 +84,14 @@ export function LargeTransactions() {
         <div className="toolbar" style={{ marginBottom: 0 }}>
           <div className="segmented">
             <button type="button" onClick={() => setMonth(shiftMonth(month, -1))}>
-              ← Tháng trước
+              {monthNumberLabel(shiftMonth(month, -1), month)}
             </button>
             <button
               type="button"
               onClick={() => setMonth(shiftMonth(month, 1))}
               disabled={month >= thisMonth}
             >
-              Tháng sau →
+              {monthNumberLabel(shiftMonth(month, 1), month)}
             </button>
           </div>
           <input

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { Category, Direction } from '../../shared/types';
 import { api } from '../lib/api';
 import { useCurrentUrl } from '../lib/navigation';
+import { ActionIcon } from '../components/icons';
 
 /** Màn hình form gửi kèm lời báo việc vừa làm xong, để hiện ở đây. */
 interface NoticeState {
@@ -95,8 +96,14 @@ export function Categories() {
     <>
       <div className="page-head">
         <h1>Danh mục</h1>
-        <Link className="button-link primary" to="/danh-muc/them" state={{ from: here }}>
-          + Thêm danh mục
+        <Link
+          className="button-link primary icon-button"
+          to="/danh-muc/them"
+          state={{ from: here }}
+          aria-label="Thêm danh mục"
+          title="Thêm danh mục"
+        >
+          <ActionIcon name="plus" />
         </Link>
       </div>
 
