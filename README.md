@@ -9,6 +9,11 @@ thức thanh toán**. Dashboard so sánh trực tiếp tháng hiện tại với
 trang **Khoản lớn** gom các khoản thu/chi vượt ngưỡng để soi kỹ từng khoản. Nhiều tài
 khoản có thể vào chung một hộ gia đình qua mã mời để thấy chung số liệu.
 
+Bên cạnh tiền, app còn giữ **lịch hoạt động của từng người trong nhà** — đi làm, đi
+dạy, đi học — khai một lần theo khuôn mẫu lặp hàng tuần rồi xem trên lưới tuần trục
+giờ hoặc lưới tháng. Mảng này tách hẳn khỏi thu chi: không có cột tiền, không sinh
+giao dịch.
+
 ## Các trang
 
 | Trang | Làm gì |
@@ -16,15 +21,16 @@ khoản có thể vào chung một hộ gia đình qua mã mời để thấy ch
 | Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước |
 | Giao dịch | Nhập, sửa, sao chép, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
+| Lịch hoạt động | Lưới **tuần trục giờ** và lưới **tháng** cho lịch đi làm, đi dạy, đi học của từng người; mỗi thành viên một màu, chồng giờ nằm cạnh nhau. Nghỉ hoặc dời **từng buổi** mà không đụng tới khuôn mẫu lặp |
 | Danh mục | Thêm, **sửa tên và biểu tượng** (chọn từ bảng icon có sẵn), lưu trữ hoặc xoá. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
-| Hộ gia đình | Thành viên và mã mời |
+| Hộ gia đình | **Thành viên trong nhà** (kể cả trẻ nhỏ, ông bà không có tài khoản), tài khoản đăng nhập và mã mời |
 
 ## Công nghệ
 
 | Thành phần | Dùng gì |
 |---|---|
-| Giao diện | React 18 + Vite, biểu đồ Recharts, hỗ trợ giao diện sáng/tối |
+| Giao diện | React 18 + Vite, biểu đồ Recharts, giao diện sáng/tối theo máy hoặc **chọn tay** và nhớ lựa chọn |
 | API | Pages Functions chạy Hono, gom vào một catch-all `functions/api/[[path]].ts` |
 | Dữ liệu | Cloudflare D1 (SQLite) |
 | Tìm kiếm ngữ nghĩa & hỏi đáp | Cloudflare Vectorize + Workers AI (`@cf/baai/bge-m3`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast`) |

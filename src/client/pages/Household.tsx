@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { fullDateLabel } from '../lib/format';
 import { useIsPhone } from '../lib/use-media-query';
+import { FamilyMembers } from '../components/FamilyMembers';
 
 export function Household() {
   const { me, setMe, refresh } = useAuth();
@@ -96,9 +97,14 @@ export function Household() {
         </p>
       </section>
 
+      <FamilyMembers accounts={members} />
+
       <section className="card">
-        <h2 className="card-title">Thành viên</h2>
-        <p className="card-sub">{members.length} người</p>
+        <h2 className="card-title">Tài khoản đăng nhập</h2>
+        <p className="card-sub">
+          {members.length} tài khoản vào chung hộ này. Người trong nhà không có tài khoản thì khai ở
+          khối trên.
+        </p>
         {isPhone ? (
           <ul className="member-cards">
             {members.map((m) => (

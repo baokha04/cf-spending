@@ -6,6 +6,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
 import { LargeTransactions } from './pages/LargeTransactions';
 import { Categories } from './pages/Categories';
+import { Schedule } from './pages/Schedule';
 import { Household } from './pages/Household';
 import { Ask } from './pages/Ask';
 import { Login } from './pages/Login';
@@ -58,6 +59,16 @@ function TabIcon({ name }: { name: string }) {
       return (
         <svg {...common}>
           <path d="M3 16h3l3.5-9 4 12 3-7h4.5" />
+        </svg>
+      );
+    case 'schedule':
+      // Khung lịch với hai móc treo và một đường kẻ ngang chia đầu bảng.
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="16" rx="2.5" />
+          <path d="M3 10h18" />
+          <path d="M8 3v4M16 3v4" />
+          <path d="M7.5 14h3M13.5 14h3M7.5 17.5h3" />
         </svg>
       );
     case 'ask':
@@ -130,6 +141,7 @@ const NAV = [
   { to: '/', label: 'Tổng quan', shortLabel: 'Tổng quan', icon: 'overview', end: true },
   { to: '/giao-dich', label: 'Giao dịch', shortLabel: 'Giao dịch', icon: 'transactions' },
   { to: '/khoan-lon', label: 'Khoản lớn', shortLabel: 'Khoản lớn', icon: 'large' },
+  { to: '/lich', label: 'Lịch hoạt động', shortLabel: 'Lịch', icon: 'schedule' },
   { to: '/danh-muc', label: 'Danh mục', shortLabel: 'Danh mục', icon: 'categories' },
   { to: '/hoi-dap', label: 'Hỏi đáp', shortLabel: 'Hỏi đáp', icon: 'ask' },
   { to: '/ho-gia-dinh', label: 'Hộ gia đình', shortLabel: 'Gia đình', icon: 'household' },
@@ -206,6 +218,7 @@ export function App() {
         <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
         <Route path="/giao-dich" element={<RequireAuth><Transactions /></RequireAuth>} />
         <Route path="/khoan-lon" element={<RequireAuth><LargeTransactions /></RequireAuth>} />
+        <Route path="/lich" element={<RequireAuth><Schedule /></RequireAuth>} />
         <Route path="/danh-muc" element={<RequireAuth><Categories /></RequireAuth>} />
         <Route path="/hoi-dap" element={<RequireAuth><Ask /></RequireAuth>} />
         <Route path="/ho-gia-dinh" element={<RequireAuth><Household /></RequireAuth>} />

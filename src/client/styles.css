@@ -35,6 +35,26 @@
   /* Chiều cao thanh tab dưới đáy, chưa tính vùng an toàn. */
   --tabbar-h: 56px;
 
+  /* Màu nhận dạng thành viên trong lịch. Tám màu tách bạch cho người mù màu;
+     bản '-soft' là nền khối, đủ nhạt để chữ --text-primary vẫn đọc rõ.
+     Màu không bao giờ là tín hiệu duy nhất — khối nào cũng in kèm tên người. */
+  --member-c1: #2a6fd6;
+  --member-c1-soft: #e4eefb;
+  --member-c2: #c85a15;
+  --member-c2-soft: #fbeade;
+  --member-c3: #7a3fbf;
+  --member-c3-soft: #efe6fa;
+  --member-c4: #0e7359;
+  --member-c4-soft: #ddf1ea;
+  --member-c5: #b52a68;
+  --member-c5-soft: #fbe3ef;
+  --member-c6: #7d600f;
+  --member-c6-soft: #f5eed7;
+  --member-c7: #0f687f;
+  --member-c7-soft: #dcedf3;
+  --member-c8: #b83a2c;
+  --member-c8-soft: #fbe5e1;
+
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
@@ -56,6 +76,24 @@
     --critical: #e66767;
     --focus: #3987e5;
     --shadow: none;
+
+    /* Màu thành viên, bản cho nền tối. */
+    --member-c1: #5aa2f0;
+    --member-c1-soft: #16283c;
+    --member-c2: #f0864a;
+    --member-c2-soft: #3a2416;
+    --member-c3: #b088ee;
+    --member-c3-soft: #2a1f3d;
+    --member-c4: #35b898;
+    --member-c4-soft: #0f2f28;
+    --member-c5: #ef77ad;
+    --member-c5-soft: #38182a;
+    --member-c6: #c9a63f;
+    --member-c6-soft: #33290f;
+    --member-c7: #4bb6cf;
+    --member-c7-soft: #122c33;
+    --member-c8: #ef7a6c;
+    --member-c8-soft: #3a1e1a;
   }
 }
 
@@ -76,6 +114,24 @@
   --critical: #e66767;
   --focus: #3987e5;
   --shadow: none;
+
+  /* Màu thành viên, bản cho nền tối. */
+  --member-c1: #5aa2f0;
+  --member-c1-soft: #16283c;
+  --member-c2: #f0864a;
+  --member-c2-soft: #3a2416;
+  --member-c3: #b088ee;
+  --member-c3-soft: #2a1f3d;
+  --member-c4: #35b898;
+  --member-c4-soft: #0f2f28;
+  --member-c5: #ef77ad;
+  --member-c5-soft: #38182a;
+  --member-c6: #c9a63f;
+  --member-c6-soft: #33290f;
+  --member-c7: #4bb6cf;
+  --member-c7-soft: #122c33;
+  --member-c8: #ef7a6c;
+  --member-c8-soft: #3a1e1a;
 }
 
 * { box-sizing: border-box; }
@@ -619,6 +675,278 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
 }
 .member-card .member-meta .dot { color: var(--text-muted); }
 
+/* --------------------------------------------------------- lịch hoạt động */
+
+.pseudo-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.field-hint { font-size: 0.76rem; color: var(--text-muted); margin: 4px 0 0; }
+.field-hint.warn { color: var(--critical); }
+.field-wide { grid-column: 1 / -1; }
+
+/* Chọn màu thành viên: dấu tick để trạng thái chọn không chỉ dựa vào màu. */
+.color-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+.color-swatch {
+  width: 30px;
+  height: 30px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+.color-swatch.selected { border-color: var(--text-primary); }
+
+/* Chọn thứ trong tuần. */
+.dow-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
+.dow-toggle button {
+  min-width: 44px;
+  padding: 8px 6px;
+  font-size: 0.82rem;
+  background: transparent;
+}
+.dow-toggle button.on {
+  background: var(--focus);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 650;
+}
+
+.member-form,
+.activity-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.member-form-color { grid-column: 1 / -1; }
+.member-form-actions,
+.activity-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Dải màu bên trái của một thành viên hoặc một hoạt động. */
+.member-stripe { width: 4px; border-radius: 2px; align-self: stretch; flex: none; }
+
+.member-card { display: flex; gap: 10px; align-items: flex-start; }
+.member-card .member-body { flex: 1; min-width: 0; }
+.member-card .member-nickname { color: var(--text-secondary); font-weight: 400; }
+.member-card.deleted .member-body { text-decoration: line-through; opacity: 0.6; }
+.member-actions { display: flex; gap: 2px; flex-wrap: wrap; flex: none; }
+
+.activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.activity-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 11px 13px;
+}
+.activity-body { flex: 1; min-width: 0; }
+.activity-title { font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.activity-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.schedule-legend { margin-top: 12px; }
+
+/* ------------------------------------------------------------ lưới tuần */
+
+/* Cột giờ dính bên trái khi cuộn ngang, hàng đầu dính khi cuộn dọc.
+   Lưới tự cuộn dọc thay vì kéo dài cả trang: một ca đêm mở cửa sổ giờ ra 24
+   tiếng, để nguyên thì trang dài lê thê mà chỗ có việc lại nằm tít dưới. */
+.week-scroll { overflow: auto; max-height: min(70vh, 700px); overscroll-behavior: contain; }
+.week-grid {
+  --gutter-w: 46px;
+  --row-h: 44px;
+  display: grid;
+  grid-template-columns: var(--gutter-w) repeat(7, minmax(84px, 1fr));
+  grid-template-rows: auto calc(var(--hour-count) * var(--row-h));
+  min-width: 100%;
+}
+
+.week-corner {
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.week-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+  text-align: center;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--grid);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+.week-head .week-dow { display: block; color: var(--text-secondary); }
+.week-head .week-date { display: block; font-weight: 650; }
+.week-head.today .week-date { color: var(--focus); }
+
+.week-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+/* Hàng đầu dính che mất nhãn giờ đầu tiên nếu nó nhô lên trên. */
+.week-hour:first-child span { top: 0; }
+.week-hour {
+  height: var(--row-h);
+  position: relative;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+/* Nhãn giờ neo vào đúng vạch kẻ ở đầu mỗi hàng. */
+.week-hour span { position: absolute; top: -0.5em; right: 6px; background: var(--surface); padding: 0 2px; }
+
+.week-col {
+  position: relative;
+  border-left: 1px solid var(--grid);
+  /* Vạch giờ vẽ bằng gradient — 24 hàng DOM cho mỗi cột là phí. */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--grid) 0,
+    var(--grid) 1px,
+    transparent 1px,
+    transparent var(--row-h)
+  );
+}
+.week-col.today { background-color: var(--surface-2); }
+
+.occ {
+  position: absolute;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 3px 5px;
+  margin: 0 1px;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+.occ:hover { filter: brightness(0.97); }
+.occ .occ-who { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.occ .occ-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.occ .occ-time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+/* Đuôi của ca qua đêm: viền đứt để thấy ngay nó nối tiếp từ hôm trước. */
+.occ.tail { border-left-style: dashed; }
+.occ.moved::after {
+  content: '↷';
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------ lưới tháng */
+
+.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.month-dow {
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  padding-bottom: 4px;
+}
+.month-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-height: 92px;
+  padding: 5px;
+  background: transparent;
+  border: 1px solid var(--grid);
+  border-radius: 8px;
+  text-align: left;
+  font: inherit;
+  font-size: 0.72rem;
+}
+.month-cell.outside { opacity: 0.45; }
+.month-cell.today { border-color: var(--focus); border-width: 2px; }
+.month-day { font-weight: 650; font-size: 0.8rem; }
+.month-chips { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.month-chip {
+  display: block;
+  padding: 2px 4px;
+  border-left: 3px solid var(--axis);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.month-chip-time { color: var(--text-secondary); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.month-more { color: var(--text-muted); padding-left: 4px; }
+
+/* ------------------------------------------------- bảng thao tác một buổi */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(11, 11, 11, 0.45);
+}
+.sheet {
+  width: min(460px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+.sheet-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+.sheet-head > div { flex: 1; min-width: 0; }
+.sheet-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.sheet-facts dt { font-size: 0.76rem; color: var(--text-muted); }
+.sheet-facts dd { margin: 2px 0 0; font-weight: 550; }
+.sheet-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.sheet-move { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.sheet-move .sheet-actions { grid-column: 1 / -1; margin-bottom: 0; }
+.sheet-foot { font-size: 0.76rem; color: var(--text-muted); margin: 6px 0 0; }
+
 @media (max-width: 720px) {
   h1 { font-size: 1.25rem; }
 
@@ -733,6 +1061,24 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   .auth-card { max-width: 100%; }
 
   .navlink { padding: 8px 12px; }
+
+  /* Lưới tuần: cột hẹp lại nhưng vẫn đọc được, máng giờ dính bên trái khi cuộn. */
+  .week-grid { --gutter-w: 40px; --row-h: 40px; grid-template-columns: var(--gutter-w) repeat(7, 62px); }
+  .occ { font-size: 0.66rem; padding: 2px 3px; }
+  .occ .occ-time { display: none; }
+
+  /* Lưới tháng: bỏ chữ trong chip, chỉ còn vạch màu cho biết ai bận ngày nào. */
+  .month-cell { min-height: 62px; padding: 3px; }
+  .month-chip { font-size: 0; padding: 0; height: 5px; border-left-width: 0; }
+  .month-chip-time { display: none; }
+  .month-more { font-size: 0.62rem; }
+
+  .color-swatch { width: var(--tap); height: var(--tap); }
+  .dow-toggle button { flex: 1 1 0; min-width: 0; }
+  .member-form, .activity-form { grid-template-columns: 1fr; }
+  .member-card { flex-direction: row; }
+  .member-actions { flex-direction: column; }
+  .sheet { max-height: 90vh; }
 }
 
 /* iPhone xoay ngang: chiều cao rất thấp, thanh tab ăn mất nội dung. */
