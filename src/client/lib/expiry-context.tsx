@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import type { ExpiringResponse } from '../../shared/types';
 import { api } from './api';
+import { useAuth } from './auth-context';
 
 interface ExpiryState {
   data: ExpiringResponse | null;
@@ -20,8 +21,13 @@ const ExpiryContext = createContext<ExpiryState | null>(null);
  * Hai chỗ đó phải luôn nói cùng một con số: chuông báo 3 khoản quá hạn mà thẻ
  * chỉ liệt kê 2 là lỗi người dùng nhìn thấy ngay. Gom về một nguồn thì gia hạn
  * xong gọi `refresh()` một lần là cả hai cùng cập nhật.
+ *
+ * Provider nằm ngoài <Routes> nên nó sống qua mọi lần chuyển trang: đặt bên
+ * trong thì mỗi lần mở một màn hình form là một lần nạp lại, và huy hiệu trên
+ * chuông nháy mất rồi hiện lại. Nó chỉ hỏi API khi đã đăng nhập.
  */
 export function ExpiryProvider({ children }: { children: ReactNode }) {
+  const { me } = useAuth();
   const [data, setData] = useState<ExpiringResponse | null>(null);
 
   const refresh = useCallback(async () => {
@@ -35,8 +41,14 @@ export function ExpiryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Đăng xuất thì xoá sạch: số của hộ cũ không được phép còn nằm trên màn hình
+    // khi người khác đăng nhập vào cùng máy.
+    if (!me) {
+      setData(null);
+      return;
+    }
     void refresh();
-  }, [refresh]);
+  }, [me, refresh]);
 
   const value = useMemo(
     () => ({

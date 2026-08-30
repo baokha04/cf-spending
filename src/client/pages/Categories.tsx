@@ -1,25 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { Category, Direction } from '../../shared/types';
 import { api } from '../lib/api';
-import { IconPicker } from '../components/IconPicker';
+import { useCurrentUrl } from '../lib/navigation';
 
-/** Trạng thái ô sửa tại chỗ của một danh mục. */
-interface EditState {
-  id: string;
-  name: string;
-  icon: string;
+/** Màn hình form gửi kèm lời báo việc vừa làm xong, để hiện ở đây. */
+interface NoticeState {
+  notice?: string;
 }
 
 export function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [name, setName] = useState('');
-  const [icon, setIcon] = useState('');
-  const [kind, setKind] = useState<Direction>('expense');
-  const [edit, setEdit] = useState<EditState | null>(null);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  const here = useCurrentUrl();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,40 +38,14 @@ export function Categories() {
     void load();
   }, [load]);
 
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setNotice(null);
-    try {
-      const created = await api.createCategory({ name, kind, icon: icon || null });
-      if (created.restored) {
-        setNotice(`"${created.name}" trước đó đã bị xoá nên được khôi phục lại thay vì tạo mới.`);
-      }
-      setName('');
-      setIcon('');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không tạo được danh mục');
-    }
-  }
-
-  async function saveEdit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!edit) return;
-    setError(null);
-    setNotice(null);
-    setSaving(true);
-    try {
-      // Loại thu/chi không đổi được: đổi rồi thì các giao dịch cũ sẽ lệch chiều.
-      await api.updateCategory(edit.id, { name: edit.name, icon: edit.icon || null });
-      setEdit(null);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không sửa được danh mục');
-    } finally {
-      setSaving(false);
-    }
-  }
+  // Vừa từ màn hình form quay về: hiện lời báo rồi xoá khỏi lịch sử duyệt web,
+  // nếu không tải lại trang là nó hiện lại một lần nữa.
+  useEffect(() => {
+    const fromForm = (location.state as NoticeState | null)?.notice;
+    if (!fromForm) return;
+    setNotice(fromForm);
+    navigate(here, { replace: true, state: null });
+  }, [location.state, navigate, here]);
 
   async function remove(category: Category) {
     // Xoá mềm: hàng vẫn nằm trong bảng nên lời nhắc không cần doạ dẫm.
@@ -123,38 +95,13 @@ export function Categories() {
     <>
       <div className="page-head">
         <h1>Danh mục</h1>
+        <Link className="button-link primary" to="/danh-muc/them" state={{ from: here }}>
+          + Thêm danh mục
+        </Link>
       </div>
 
       {error && <div className="alert error">{error}</div>}
       {notice && <div className="alert info">{notice}</div>}
-
-      <section className="card">
-        <h2 className="card-title">Thêm danh mục</h2>
-        <p className="card-sub">
-          Tên không được trùng trong cùng một loại thu hoặc chi. Biểu tượng chọn từ danh sách có
-          sẵn.
-        </p>
-        <form onSubmit={create} className="toolbar" style={{ marginBottom: 0 }}>
-          <div className="field" style={{ flex: '1 1 200px' }}>
-            <label htmlFor="c-name">Tên</label>
-            <input id="c-name" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="field" style={{ width: 'auto' }}>
-            <label htmlFor="c-icon">Biểu tượng</label>
-            <IconPicker id="c-icon" value={icon} onChange={setIcon} />
-          </div>
-          <div className="field" style={{ width: 130 }}>
-            <label htmlFor="c-kind">Loại</label>
-            <select id="c-kind" value={kind} onChange={(e) => setKind(e.target.value as Direction)}>
-              <option value="expense">Chi</option>
-              <option value="income">Thu</option>
-            </select>
-          </div>
-          <button type="submit" className="primary">
-            Thêm
-          </button>
-        </form>
-      </section>
 
       {loading ? (
         <div className="card empty">Đang tải…</div>
@@ -172,9 +119,7 @@ export function Categories() {
               {rows.length === 0 ? (
                 <p className="empty">Chưa có danh mục nào.</p>
               ) : (
-                /* Bảng chọn biểu tượng nổi ra ngoài dòng đang sửa, mà
-                   .table-scroll thì cắt mất phần tràn — bỏ cuộn trong lúc sửa. */
-                <div className={`table-scroll${edit ? ' popover-open' : ''}`}>
+                <div className="table-scroll">
                   <table>
                     <thead>
                       <tr>
@@ -184,83 +129,47 @@ export function Categories() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((c) =>
-                        edit?.id === c.id ? (
-                          <tr key={c.id}>
-                            {/* Sửa ngay tại dòng: đổi tên và biểu tượng, giữ nguyên
-                                mọi giao dịch đang gắn với danh mục này. */}
-                            <td colSpan={3}>
-                              <form onSubmit={saveEdit} className="toolbar" style={{ marginBottom: 0 }}>
-                                <div className="field" style={{ width: 'auto' }}>
-                                  <label htmlFor="c-edit-icon">Biểu tượng</label>
-                                  <IconPicker
-                                    id="c-edit-icon"
-                                    value={edit.icon}
-                                    onChange={(next) => setEdit({ ...edit, icon: next })}
-                                  />
-                                </div>
-                                <div className="field" style={{ flex: '1 1 200px' }}>
-                                  <label htmlFor="c-edit-name">Tên</label>
-                                  <input
-                                    id="c-edit-name"
-                                    required
-                                    autoFocus
-                                    maxLength={60}
-                                    value={edit.name}
-                                    onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-                                  />
-                                </div>
-                                <button type="submit" className="primary" disabled={saving}>
-                                  {saving ? 'Đang lưu…' : 'Lưu'}
+                      {rows.map((c) => (
+                        <tr key={c.id} className={c.deletedAt !== null ? 'deleted' : undefined}>
+                          <td>
+                            {c.icon ? `${c.icon} ` : ''}
+                            {c.name}
+                          </td>
+                          <td>
+                            <span className={`pill${c.deletedAt !== null ? ' warn' : ''}`}>
+                              {c.deletedAt !== null
+                                ? 'Đã xoá'
+                                : c.isArchived
+                                  ? 'Đã lưu trữ'
+                                  : 'Đang dùng'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {/* Danh mục đã xoá chỉ còn một đường ra: khôi phục. */}
+                            {c.deletedAt !== null ? (
+                              <button type="button" className="ghost" onClick={() => void restore(c)}>
+                                Khôi phục
+                              </button>
+                            ) : (
+                              <>
+                                <Link
+                                  className="button-link ghost"
+                                  to={`/danh-muc/${c.id}/sua`}
+                                  state={{ from: here }}
+                                >
+                                  Sửa
+                                </Link>
+                                <button type="button" className="ghost" onClick={() => void toggleArchive(c)}>
+                                  {c.isArchived ? 'Dùng lại' : 'Lưu trữ'}
                                 </button>
-                                <button type="button" onClick={() => setEdit(null)} disabled={saving}>
-                                  Huỷ
+                                <button type="button" className="ghost danger" onClick={() => void remove(c)}>
+                                  Xoá
                                 </button>
-                              </form>
-                            </td>
-                          </tr>
-                        ) : (
-                          <tr key={c.id} className={c.deletedAt !== null ? 'deleted' : undefined}>
-                            <td>
-                              {c.icon ? `${c.icon} ` : ''}
-                              {c.name}
-                            </td>
-                            <td>
-                              <span className={`pill${c.deletedAt !== null ? ' warn' : ''}`}>
-                                {c.deletedAt !== null
-                                  ? 'Đã xoá'
-                                  : c.isArchived
-                                    ? 'Đã lưu trữ'
-                                    : 'Đang dùng'}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              {/* Danh mục đã xoá chỉ còn một đường ra: khôi phục. */}
-                              {c.deletedAt !== null ? (
-                                <button type="button" className="ghost" onClick={() => void restore(c)}>
-                                  Khôi phục
-                                </button>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="ghost"
-                                    onClick={() => setEdit({ id: c.id, name: c.name, icon: c.icon ?? '' })}
-                                  >
-                                    Sửa
-                                  </button>
-                                  <button type="button" className="ghost" onClick={() => void toggleArchive(c)}>
-                                    {c.isArchived ? 'Dùng lại' : 'Lưu trữ'}
-                                  </button>
-                                  <button type="button" className="ghost danger" onClick={() => void remove(c)}>
-                                    Xoá
-                                  </button>
-                                </>
-                              )}
-                            </td>
-                          </tr>
-                        ),
-                      )}
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>

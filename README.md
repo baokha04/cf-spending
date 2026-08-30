@@ -23,11 +23,11 @@ giao dịch.
 | Trang | Làm gì |
 |---|---|
 | Tổng quan | KPI và bốn biểu đồ, tháng này so với tháng trước, kèm thẻ **nhắc gia hạn** ở trên cùng |
-| Giao dịch | Nhập, sửa, sao chép, **tách**, lọc, tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết, và có **ngày hết hạn** tuỳ chọn. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
+| Giao dịch | Danh sách có lọc và tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Nút **Thêm giao dịch**, cũng như sửa, sao chép và tách, đều mở **màn hình nhập riêng**. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
 | Lịch hoạt động | Lưới **tuần trục giờ** và lưới **tháng** cho lịch đi làm, đi dạy, đi học của từng người; mỗi thành viên một màu, chồng giờ nằm cạnh nhau. Nghỉ hoặc dời **từng buổi** mà không đụng tới khuôn mẫu lặp. **Sao chép** một hoạt động để tạo nhanh cái gần giống, hoặc để đưa sang người khác |
 | Lịch riêng | Màn hình của **một người**: tuần của họ, thống kê tuần đó (số buổi, tổng giờ, ngày bận nhất, giờ theo từng loại), toàn bộ hoạt động đang khai cho họ, và nút **chép cả lịch sang người khác**. Vào từ tên người trên legend của lịch cả nhà, hoặc từ nút **Lịch riêng** ở trang Hộ gia đình |
-| Danh mục | Thêm, **sửa tên và biểu tượng** (chọn từ bảng icon có sẵn), lưu trữ hoặc xoá. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
+| Danh mục | Danh sách theo hai nhóm thu/chi, lưu trữ hoặc xoá tại chỗ; thêm và **sửa tên, biểu tượng** (chọn từ bảng icon có sẵn) ở màn hình nhập riêng. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
 | Hộ gia đình | **Thành viên trong nhà** (kể cả trẻ nhỏ, ông bà không có tài khoản), tài khoản đăng nhập và mã mời |
 
@@ -276,6 +276,19 @@ Chuông trên thanh trên cùng đếm **riêng số khoản đã quá hạn**, 
 hạn: con số trên huy hiệu phải trả lời đúng một câu "có bao nhiêu thứ đang trễ". Chuông
 và thẻ "Cần gia hạn" dùng chung một lần gọi API qua `ExpiryProvider`, nên không bao giờ
 có chuyện chuông báo 3 mà thẻ chỉ liệt kê 2.
+
+**Danh sách và form là hai màn hình khác nhau.** Trang Giao dịch và trang Danh mục
+chỉ hiển thị danh sách; thêm, sửa, sao chép hay tách đều mở một màn hình riêng
+(`/giao-dich/them`, `/giao-dich/:id/sua`, `/danh-muc/:id/sua`…). Trên điện thoại thì
+form và bảng không bao giờ đủ chỗ cho cả hai, mà lúc đang gõ cũng chẳng ai nhìn bảng.
+Là URL thật nên mở tab mới, bấm Back hay gửi link cho người khác đều chạy đúng.
+
+Đổi lại, mỗi lần nhập là một lần rời danh sách rồi quay về, nên **bộ lọc của trang
+Giao dịch nằm trong URL** (`?thang=…&chieu=…&tim=…`) thay vì trong state của
+component: quay về là thấy đúng danh sách đang xem dở. Màn hình form nhận đường lui
+qua `state.from` — chính URL đầy đủ của danh sách lúc mở nó — và lưu xong thì *thay*
+mục lịch sử thay vì đẩy thêm, để bấm Back không quay lại cái form vừa lưu. Vào thẳng
+URL form (dán link) thì không có `state.from`, lúc đó rơi về danh sách mặc định.
 
 **Tách một khoản làm hai.** `POST /api/transactions/:id/split` cắt một phần số tiền
 ra thành giao dịch mới và trừ đúng chừng ấy ở khoản gốc — hoá đơn siêu thị 1 triệu
