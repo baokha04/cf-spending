@@ -7,6 +7,7 @@ import {
   timeRangeLabel,
 } from '../lib/format';
 import { memberColorVar } from '../lib/schedule';
+import { IconButton } from './icons';
 
 interface Props {
   occurrence: Occurrence;
@@ -86,9 +87,7 @@ export function OccurrenceSheet({
               {ACTIVITY_KIND_LABEL[occurrence.kind]}
             </p>
           </div>
-          <button type="button" className="ghost" onClick={onClose} aria-label="Đóng">
-            ✕
-          </button>
+          <IconButton label="Đóng" icon="close" onClick={onClose} />
         </div>
 
         <dl className="sheet-facts">

@@ -27,7 +27,7 @@ giao dịch.
 | Giao dịch | Danh sách có lọc và tìm theo từ khoá; mỗi dòng mở ra được phần chi tiết. Nút **Thêm giao dịch**, cũng như sửa, sao chép và tách, đều mở **màn hình nhập riêng**. Dòng đã xoá vẫn nằm đó ở dạng gạch ngang và khôi phục lại được |
 | Khoản lớn ¹ | Thu/chi vượt ngưỡng trong tháng, tỷ trọng từng khoản, bổ sung chi tiết tại chỗ |
 | Lịch hoạt động | Lưới **tuần trục giờ** và lưới **tháng** cho lịch đi làm, đi dạy, đi học của từng người; mỗi thành viên một màu, chồng giờ nằm cạnh nhau. Nghỉ hoặc dời **từng buổi** mà không đụng tới khuôn mẫu lặp. **Sao chép** một hoạt động để tạo nhanh cái gần giống, hoặc để đưa sang người khác |
-| Lịch riêng | Màn hình của **một người**: tuần của họ, thống kê tuần đó (số buổi, tổng giờ, ngày bận nhất, giờ theo từng loại), toàn bộ hoạt động đang khai cho họ, và nút **chép cả lịch sang người khác**. Vào từ tên người trên legend của lịch cả nhà, hoặc từ nút **Lịch riêng** ở trang Hộ gia đình |
+| Lịch riêng | Màn hình của **một người**: tuần của họ, thống kê tuần đó (số buổi, tổng giờ, ngày bận nhất, giờ theo từng loại), và toàn bộ hoạt động đang khai cho họ. Vào từ tên người trên legend của lịch cả nhà, hoặc từ nút **Lịch riêng** ở trang Hộ gia đình |
 | Danh mục | Danh sách theo hai nhóm thu/chi, lưu trữ hoặc xoá tại chỗ; thêm và **sửa tên, biểu tượng** (chọn từ bảng icon có sẵn) ở màn hình nhập riêng. Danh mục đã xoá hiện gạch ngang và khôi phục lại được |
 | Hỏi đáp | Tìm kiếm ngữ nghĩa và hỏi đáp RAG trên dữ liệu của hộ |
 | Hộ gia đình | **Thành viên trong nhà** (kể cả trẻ nhỏ, ông bà không có tài khoản), tài khoản đăng nhập và mã mời |
@@ -295,6 +295,12 @@ chiếm gần trọn một thẻ. Đổi sang biểu tượng thì bảng vừa 
 không mất đi mà chuyển vào `aria-label` (trình đọc màn hình) và `title` (rê chuột), và
 mỗi nút vẫn giữ đủ cỡ chạm 44pt trên điện thoại. Các nút **thêm** (giao dịch, danh mục,
 hoạt động, người nhà) cũng vậy: chỉ còn dấu cộng.
+
+Danh sách hoạt động và danh sách thành viên đi theo đúng lối đó: *sao chép, sửa, xoá,
+khôi phục, lịch riêng* và nút đóng của bảng chi tiết một buổi đều là biểu tượng. Cả ba
+nơi dùng chung một `IconButton` (`src/client/components/icons.tsx`) nên không thể có
+chỗ quên `aria-label` hay lệch cỡ chạm. Riêng *Lịch riêng* vẫn là thẻ `<a>` mang dáng
+nút, để mở tab mới và sao chép địa chỉ vẫn được.
 
 **Ô ngày rộng vừa đủ.** `input[type=date]` và `input[type=month]` giới hạn ở `12rem`
 thay vì kéo hết bề ngang: một ngày chỉ cần chỗ cho `dd/mm/yyyy` và nút lịch, ô dài suốt

@@ -9,7 +9,7 @@ import {
   fullDateLabel,
 } from '../lib/format';
 import { memberColorVar } from '../lib/schedule';
-import { ActionIcon } from './icons';
+import { ActionIcon, IconButton } from './icons';
 import { IconPicker } from './IconPicker';
 
 /** Trạng thái của form thêm mới hoặc sửa tại chỗ. */
@@ -339,22 +339,29 @@ export function FamilyMembers({ accounts }: Props) {
                   </span>
                 </div>
               </div>
+              {/* Nút thao tác chỉ còn biểu tượng, như ở bảng giao dịch và danh sách
+                  hoạt động. "Lịch riêng" vẫn là thẻ <a> để mở được tab mới, chỉ
+                  đổi sang dáng nút biểu tượng cho đều hàng. */}
               <div className="member-actions">
                 {m.deletedAt !== null ? (
-                  <button type="button" className="ghost" onClick={() => void restore(m)}>
-                    Khôi phục
-                  </button>
+                  <IconButton label="Khôi phục" icon="restore" onClick={() => void restore(m)} />
                 ) : (
                   <>
-                    <Link className="navlink" to={`/lich/${m.id}`}>
-                      Lịch riêng
+                    <Link
+                      className="button-link ghost icon-button"
+                      to={`/lich/${m.id}`}
+                      aria-label={`Lịch riêng của ${m.name}`}
+                      title="Lịch riêng — tuần của người này và toàn bộ hoạt động đang khai"
+                    >
+                      <ActionIcon name="calendar" />
                     </Link>
-                    <button type="button" className="ghost" onClick={() => startEdit(m)}>
-                      Sửa
-                    </button>
-                    <button type="button" className="ghost danger" onClick={() => void remove(m)}>
-                      Xoá
-                    </button>
+                    <IconButton label="Sửa" icon="edit" onClick={() => startEdit(m)} />
+                    <IconButton
+                      label="Xoá"
+                      icon="delete"
+                      className="danger"
+                      onClick={() => void remove(m)}
+                    />
                   </>
                 )}
               </div>

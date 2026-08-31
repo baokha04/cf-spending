@@ -305,17 +305,6 @@ export const activityExceptionSchema = z
     path: ['status'],
   });
 
-/** Chép toàn bộ khuôn mẫu của một người sang một người khác trong cùng hộ. */
-export const activityCopySchema = z
-  .object({
-    fromMemberId: z.string().trim().min(1, 'Cần chọn người có lịch cần chép'),
-    toMemberId: z.string().trim().min(1, 'Cần chọn người nhận lịch'),
-  })
-  .refine((v) => v.fromMemberId !== v.toMemberId, {
-    message: 'Không chép lịch sang chính người đó',
-    path: ['toMemberId'],
-  });
-
 export const scheduleQuerySchema = z
   .object({
     from: isoDate,

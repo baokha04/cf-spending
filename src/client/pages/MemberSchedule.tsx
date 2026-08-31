@@ -61,10 +61,6 @@ export function MemberSchedule() {
   const [copying, setCopying] = useState<Activity | null>(null);
   const [adding, setAdding] = useState(false);
 
-  /** Người nhận bản chép cả lịch; rỗng nghĩa là chưa mở khối đó ra. */
-  const [copyTargetId, setCopyTargetId] = useState('');
-  const [copyingAll, setCopyingAll] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -102,7 +98,6 @@ export function MemberSchedule() {
   const occurrences = fresh?.schedule.occurrences ?? [];
   const activities = fresh?.activities ?? [];
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  const others = useMemo(() => members.filter((m) => m.id !== memberId), [members, memberId]);
 
   /** Thống kê của đúng tuần đang xem — con số hữu ích nhất khi soi một người. */
   const stats = useMemo(() => {
@@ -177,33 +172,6 @@ export function MemberSchedule() {
       setPicked(null);
       setNotice('Đã dời buổi.');
     }, 'Không dời được buổi này');
-  }
-
-  async function copyWholeSchedule() {
-    const target = members.find((m) => m.id === copyTargetId);
-    if (!member || !target) return;
-    if (
-      !confirm(
-        `Chép ${activities.length} hoạt động của ${member.name} sang ${target.name}?` +
-          ' Lịch sẵn có của họ vẫn giữ nguyên, bản chép thêm vào bên cạnh.',
-      )
-    ) {
-      return;
-    }
-    setCopyingAll(true);
-    try {
-      await guard(async () => {
-        const res = await api.copySchedule({ fromMemberId: member.id, toMemberId: target.id });
-        setCopyTargetId('');
-        setNotice(
-          res.copied === 0
-            ? `${res.fromName} chưa có hoạt động nào để chép.`
-            : `Đã chép ${res.copied} hoạt động của ${res.fromName} sang ${res.toName}.`,
-        );
-      }, 'Không chép được lịch');
-    } finally {
-      setCopyingAll(false);
-    }
   }
 
   async function resetSession(occurrence: Occurrence) {
@@ -386,44 +354,6 @@ export function MemberSchedule() {
           onSubmit={saveActivity}
           onRemove={removeActivity}
         />
-      )}
-
-      {member && fresh && others.length > 0 && (
-        <section className="card">
-          <h2 className="card-title">Chép cả lịch sang người khác</h2>
-          <p className="card-sub">
-            Hai đứa học cùng lớp thì khai một lần rồi chép, khỏi gõ lại từng buổi. Lịch của người
-            nhận vẫn giữ nguyên, bản chép thêm vào bên cạnh. Các buổi đã cho nghỉ hoặc đã dời{' '}
-            <strong>không</strong> đi theo — bản chép là lịch sạch theo đúng khuôn mẫu.
-          </p>
-          <div className="toolbar" style={{ marginBottom: 0 }}>
-            <div className="field" style={{ flex: '1 1 220px' }}>
-              <label htmlFor="copy-target">Chép sang</label>
-              <select
-                id="copy-target"
-                value={copyTargetId}
-                onChange={(e) => setCopyTargetId(e.target.value)}
-              >
-                <option value="">Chọn người nhận…</option>
-                {others.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.icon ? `${m.icon} ` : ''}
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              disabled={!copyTargetId || copyingAll || activities.length === 0}
-              onClick={() => void copyWholeSchedule()}
-            >
-              {copyingAll
-                ? 'Đang chép…'
-                : `Chép ${activities.length} hoạt động`}
-            </button>
-          </div>
-        </section>
       )}
 
       {picked && (

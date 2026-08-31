@@ -7,6 +7,8 @@
  * đọc màn hình chỉ đọc được "nút", còn người dùng chuột thì mất cả tooltip.
  */
 
+import type { ReactNode } from 'react';
+
 export type ActionIconName =
   | 'plus'
   | 'expand'
@@ -15,7 +17,9 @@ export type ActionIconName =
   | 'split'
   | 'edit'
   | 'delete'
-  | 'restore';
+  | 'restore'
+  | 'calendar'
+  | 'close';
 
 const PATHS: Record<ActionIconName, JSX.Element> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -51,6 +55,15 @@ const PATHS: Record<ActionIconName, JSX.Element> = {
       <path d="m6.5 7 .9 12.1A1.9 1.9 0 0 0 9.3 21h5.4a1.9 1.9 0 0 0 1.9-1.9L17.5 7" />
     </>
   ),
+  // Tờ lịch có hai móc treo: lối vào lịch riêng của một người.
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 3.5v3M16 3.5v3" />
+    </>
+  ),
+  close: <path d="M6 6l12 12M18 6L6 18" />,
   // Mũi tên vòng ngược chiều kim đồng hồ: quay lại trạng thái trước khi xoá.
   restore: (
     <>
@@ -75,5 +88,48 @@ export function ActionIcon({ name }: { name: ActionIconName }) {
     >
       {PATHS[name]}
     </svg>
+  );
+}
+
+/**
+ * Nút thao tác chỉ có biểu tượng — dạng dùng chung cho mọi dòng dữ liệu.
+ *
+ * `label` là nhãn chữ của nút ngày trước: nó không mất đi, chỉ chuyển vào
+ * `aria-label` cho trình đọc màn hình và `title` cho tooltip khi rê chuột. Ai
+ * không đoán ra biểu tượng vẫn đọc được nút này làm gì.
+ */
+export function IconButton({
+  label,
+  icon,
+  onClick,
+  title,
+  className,
+  disabled,
+  expanded,
+  children,
+}: {
+  label: string;
+  icon: ActionIconName;
+  onClick: () => void;
+  /** Câu giải thích dài hơn nhãn; không truyền thì tooltip lấy luôn `label`. */
+  title?: string;
+  className?: string;
+  disabled?: boolean;
+  expanded?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`ghost icon-button${className ? ` ${className}` : ''}`}
+      aria-label={label}
+      title={title ?? label}
+      aria-expanded={expanded}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <ActionIcon name={icon} />
+      {children}
+    </button>
   );
 }
