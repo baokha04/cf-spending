@@ -4,7 +4,8 @@ import { daysUntil, needsRenewal } from '../../shared/expiry';
 import { api } from '../lib/api';
 import { RECURRENCE_LABEL, expiryPillLabel, fullDateLabel, money, todayISO } from '../lib/format';
 import { useIsPhone } from '../lib/use-media-query';
-import { ActionIcon } from './icons';
+import { IconButton } from './icons';
+import type { ActionIconName } from './icons';
 import { TransactionDetails, hasExtraInfo } from './TransactionDetails';
 
 interface Props {
@@ -106,37 +107,23 @@ export function TransactionTable({
    */
   const iconButton = (
     label: string,
-    name: Parameters<typeof ActionIcon>[0]['name'],
+    icon: ActionIconName,
     onClick: () => void,
-    extra?: { className?: string; disabled?: boolean; title?: string; expanded?: boolean },
-  ) => (
-    <button
-      type="button"
-      className={`ghost icon-button${extra?.className ? ` ${extra.className}` : ''}`}
-      aria-label={label}
-      title={extra?.title ?? label}
-      aria-expanded={extra?.expanded}
-      disabled={extra?.disabled}
-      onClick={onClick}
-    >
-      <ActionIcon name={name} />
-    </button>
-  );
+    extra?: { className?: string; disabled?: boolean; title?: string },
+  ) => <IconButton label={label} icon={icon} onClick={onClick} {...extra} />;
 
   const detailsButton = (tx: Transaction) => {
     const open = expanded.has(tx.id);
     return (
-      <button
-        type="button"
-        className="ghost icon-button"
-        aria-expanded={open}
-        aria-label={open ? 'Ẩn chi tiết' : 'Xem chi tiết'}
+      <IconButton
+        label={open ? 'Ẩn chi tiết' : 'Xem chi tiết'}
+        icon={open ? 'collapse' : 'expand'}
+        expanded={open}
         onClick={() => toggleDetails(tx.id)}
         title={hasExtraInfo(tx) ? 'Xem thông tin chi tiết' : 'Khoản này chưa ghi chi tiết'}
       >
-        <ActionIcon name={open ? 'collapse' : 'expand'} />
         {hasExtraInfo(tx) && <span className="has-detail" aria-label="đã có chi tiết" />}
-      </button>
+      </IconButton>
     );
   };
 

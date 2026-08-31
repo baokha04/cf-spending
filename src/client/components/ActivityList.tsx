@@ -7,7 +7,7 @@ import {
   weekdayLabel,
 } from '../lib/format';
 import { memberColorVar } from '../lib/schedule';
-import { ActionIcon } from './icons';
+import { ActionIcon, IconButton } from './icons';
 import { ActivityForm } from './ActivityForm';
 
 export interface ActivityListProps {
@@ -140,23 +140,25 @@ export function ActivityList({
                     </span>
                   </div>
                 </div>
+                {/* Nút thao tác chỉ còn biểu tượng, như ở bảng giao dịch: ba nút chữ
+                    xuống dòng lộn xộn bên phải mỗi dòng trên màn hình điện thoại.
+                    Nhãn chuyển vào aria-label và tooltip nên không mất nghĩa. */}
                 <div className="member-actions">
                   {onCopy && (
-                    <button
-                      type="button"
-                      className="ghost"
+                    <IconButton
+                      label="Sao chép"
+                      icon="copy"
                       onClick={() => onCopy(a)}
-                      title="Điền sẵn form theo hoạt động này để lưu thành hoạt động mới"
-                    >
-                      Sao chép
-                    </button>
+                      title="Sao chép — điền sẵn form theo hoạt động này để lưu thành hoạt động mới"
+                    />
                   )}
-                  <button type="button" className="ghost" onClick={() => onEdit(a)}>
-                    Sửa
-                  </button>
-                  <button type="button" className="ghost danger" onClick={() => void onRemove(a)}>
-                    Xoá
-                  </button>
+                  <IconButton label="Sửa" icon="edit" onClick={() => onEdit(a)} />
+                  <IconButton
+                    label="Xoá"
+                    icon="delete"
+                    className="danger"
+                    onClick={() => void onRemove(a)}
+                  />
                 </div>
               </li>
             );

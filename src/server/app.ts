@@ -18,7 +18,6 @@ import { newId, newInviteCode, normalizeInviteCode } from './ids';
 import * as db from './db/queries';
 import {
   MAX_SCHEDULE_SPAN_DAYS,
-  activityCopySchema,
   activityCreateSchema,
   activityKindParam,
   activityExceptionSchema,
@@ -542,36 +541,6 @@ app.get('/activities', requireAuth, async (c) => {
       includeDeleted: c.req.query('includeDeleted') === '1',
     }),
   });
-});
-
-/**
- * Chép cả lịch của một người sang một người khác — hai đứa con học cùng lớp thì
- * khai một lần rồi chép, khỏi gõ lại từng buổi.
- *
- * Đặt TRƯỚC '/activities/:id' cho chắc: dự án đã dính một lần với
- * '/transactions/large' bị hiểu thành một id.
- */
-app.post('/activities/copy', requireAuth, async (c) => {
-  const parsed = parseBody(activityCopySchema, await readJson(c));
-  if (!parsed.ok) return c.json({ error: parsed.message }, 400);
-  const householdId = c.get('householdId');
-  const { fromMemberId, toMemberId } = parsed.data;
-
-  const [from, to] = await Promise.all([
-    db.getFamilyMember(c.env.DB, householdId, fromMemberId),
-    db.getFamilyMember(c.env.DB, householdId, toMemberId),
-  ]);
-  if (!from) return c.json({ error: 'Không tìm thấy người có lịch cần chép' }, 404);
-  if (!to) return c.json({ error: 'Không tìm thấy người nhận lịch' }, 404);
-
-  const copied = await db.copyActivitiesToMember(
-    c.env.DB,
-    householdId,
-    fromMemberId,
-    toMemberId,
-    Date.now(),
-  );
-  return c.json({ copied, fromName: from.name, toName: to.name });
 });
 
 app.post('/activities', requireAuth, async (c) => {

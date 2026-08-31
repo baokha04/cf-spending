@@ -1285,7 +1285,9 @@ tr.deleted > td { text-decoration: line-through; color: var(--text-muted); }
   .dow-toggle button { flex: 1 1 0; min-width: 0; }
   .member-form, .activity-form { grid-template-columns: 1fr; }
   .member-card { flex-direction: row; }
-  .member-actions { flex-direction: column; }
+  /* Nút thao tác giờ chỉ còn biểu tượng nên xếp ngang vừa đủ chỗ — xếp dọc như
+     hồi còn nút chữ chỉ làm thẻ cao gấp ba mà không thêm được gì. */
+  .member-actions { justify-content: flex-end; }
   .sheet { max-height: 90vh; }
   .member-switch { gap: 6px; }
   .member-chip { flex: 1 1 auto; justify-content: center; min-height: 38px; }
